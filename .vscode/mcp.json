@@ -1,0 +1,15 @@
+{
+  "servers": {
+    "mcp-dev-agent": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/home/max/Escritorio/mcp-dev-agent/src/mcp/server.js"],
+      "env": {
+        "WORKSPACE_DIR": "/home/max/Escritorio/mcp-dev-agent/workspace/",
+        "LOG_LEVEL": "info"
+      }
+    }
+  }
+}
+
+

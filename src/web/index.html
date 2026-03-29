@@ -1,0 +1,1963 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MCP Dev Agent</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface-hover: #1c2128;
+      --border: #30363d;
+      --border-light: #3d444d;
+      --text: #e6edf3;
+      --text-muted: #7d8590;
+      --text-dim: #484f58;
+      --accent: #58a6ff;
+      --accent-dim: #1f3a5f;
+      --accent-hover: #79b8ff;
+      --green: #3fb950;
+      --green-dim: #1a4d2e;
+      --yellow: #d29922;
+      --yellow-dim: #4d3a1a;
+      --red: #f85149;
+      --red-dim: #5a1f1f;
+      --purple: #a371f7;
+      --tool-bg: #1c2128;
+      --aside-width: 280px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100dvh;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* ── Layout ── */
+    .app-container {
+      display: flex;
+      flex: 1;
+      height: 100dvh;
+    }
+
+    .main-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    /* ── Header ── */
+    header {
+      padding: 10px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      flex-shrink: 0;
+    }
+    .dot.busy {
+      background: var(--yellow);
+      animation: pulse 1s infinite;
+    }
+
+    header h1 {
+      font-size: 15px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .header-center {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+    }
+
+    /* Workspace pill */
+    .ws-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: var(--tool-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .ws-pill:hover {
+      border-color: var(--accent);
+      color: var(--text);
+      background: var(--surface-hover);
+    }
+    .ws-pill .ws-name {
+      color: var(--text);
+      font-weight: 500;
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* Model badge - showing current model */
+    .model-badge {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 2px;
+    }
+    .model-badge .label {
+      font-size: 10px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .model-badge .model-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--accent-dim);
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-family: monospace;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .model-badge .provider-tag {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    .toggle-aside {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 6px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.15s;
+    }
+    .toggle-aside:hover {
+      border-color: var(--text-muted);
+      color: var(--text);
+    }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    /* ── Chat Area ── */
+    #chat {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: linear-gradient(180deg, #0d1117 0%, #0a0e14 100%);
+    }
+
+    .msg {
+      display: flex;
+      gap: 12px;
+      max-width: 780px;
+      width: 100%;
+      animation: fadeIn 0.2s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .msg.user { align-self: flex-end; flex-direction: row-reverse; }
+    .msg.agent { align-self: flex-start; }
+
+    .msg-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+    }
+
+    .msg-content {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .msg-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--text-dim);
+      padding: 0 4px;
+    }
+    .msg.user .msg-meta { justify-content: flex-end; }
+
+    .msg-model {
+      background: var(--accent-dim);
+      color: var(--accent);
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 10px;
+      font-family: monospace;
+    }
+
+    .msg-time {
+      color: var(--text-dim);
+    }
+
+    .bubble {
+      padding: 12px 16px;
+      border-radius: 12px;
+      line-height: 1.6;
+      font-size: 14px;
+      max-width: calc(100% - 44px);
+      word-break: break-word;
+    }
+    .msg.user .bubble {
+      background: var(--accent-dim);
+      border: 1px solid rgba(88,166,255,0.3);
+      border-radius: 12px 2px 12px 12px;
+      white-space: pre-wrap;
+    }
+    .msg.agent .bubble {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 2px 12px 12px 12px;
+    }
+
+    /* Tool calls */
+    .tool-call {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      background: var(--tool-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 12px;
+      align-self: flex-start;
+      max-width: 660px;
+      margin-left: 48px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .tool-call:hover { border-color: var(--border-light); }
+    .tool-call-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+    }
+    .tool-icon {
+      width: 22px;
+      height: 22px;
+      background: rgba(163,113,247,0.15);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+    .tool-info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .tool-name {
+      color: var(--purple);
+      font-weight: 600;
+      font-family: monospace;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+    .tool-args-preview {
+      color: var(--text-dim);
+      font-family: monospace;
+      font-size: 11px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 300px;
+    }
+    .tool-args-body {
+      display: none;
+      padding: 0 12px 10px 44px;
+      font-family: monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: pre-wrap;
+      word-break: break-all;
+      border-top: 1px solid var(--border);
+      padding-top: 8px;
+      background: rgba(0,0,0,0.2);
+      line-height: 1.5;
+    }
+    .tool-call.expanded .tool-args-body { display: block; }
+    .tool-expand-icon {
+      font-size: 10px;
+      color: var(--text-dim);
+      flex-shrink: 0;
+      transition: transform 0.15s;
+    }
+    .tool-call.expanded .tool-expand-icon { transform: rotate(90deg); }
+    .tool-status {
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 3px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    .tool-status.done { background: var(--green-dim); color: var(--green); }
+    .tool-status.running { background: var(--yellow-dim); color: var(--yellow); animation: pulse 1s infinite; }
+    .tool-status.error { background: var(--red-dim); color: var(--red); }
+
+    /* Provider switch indicator */
+    .provider-switch {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 8px 12px;
+      background: rgba(210,153,34,0.08);
+      border: 1px solid rgba(210,153,34,0.25);
+      border-left: 3px solid var(--yellow);
+      border-radius: 6px;
+      font-size: 12px;
+      align-self: flex-start;
+      margin-left: 48px;
+      max-width: 500px;
+    }
+    .provider-switch-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .provider-switch .ps-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+    .provider-switch .ps-from { color: var(--text-muted); font-family: monospace; text-decoration: line-through; }
+    .provider-switch .ps-arrow { color: var(--yellow); font-size: 14px; }
+    .provider-switch .ps-to { color: var(--yellow); font-weight: 600; font-family: monospace; }
+    .provider-switch .ps-reason { color: var(--text-dim); font-size: 11px; font-style: italic; }
+
+    /* Typing */
+    .typing { display: flex; gap: 4px; padding: 14px; }
+    .typing span {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: bounce .9s infinite;
+    }
+    .typing span:nth-child(2) { animation-delay: .2s; }
+    .typing span:nth-child(3) { animation-delay: .4s; }
+    @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }
+    .typing-status {
+      font-size: 11px;
+      color: var(--accent);
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+
+    /* Done meta */
+    .done-meta {
+      display: flex;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--green);
+      padding: 5px 12px;
+      background: var(--green-dim);
+      border: 1px solid rgba(63,185,80,0.2);
+      border-radius: 6px;
+      align-self: flex-start;
+      margin-left: 48px;
+      margin-top: 4px;
+    }
+    .done-meta span {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .done-meta .dm-sep { color: rgba(63,185,80,0.3); }
+
+    /* ── Input ── */
+    footer {
+      padding: 14px 20px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+
+    .input-wrapper {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+
+    textarea {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 14px;
+      padding: 12px 16px;
+      resize: none;
+      outline: none;
+      line-height: 1.5;
+      min-height: 48px;
+      max-height: 160px;
+      transition: border-color 0.15s;
+    }
+    textarea:focus {
+      border-color: var(--accent);
+    }
+    textarea::placeholder {
+      color: var(--text-muted);
+    }
+
+    #send-btn {
+      padding: 12px 24px;
+      background: var(--accent);
+      color: #000;
+      border: none;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.15s;
+      align-self: flex-end;
+    }
+    #send-btn:hover { background: var(--accent-hover); }
+    #send-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn-sm {
+      padding: 6px 12px;
+      font-size: 12px;
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-sm:hover {
+      color: var(--text);
+      border-color: var(--text-muted);
+      background: var(--surface-hover);
+    }
+
+    /* ── Aside Panel ── */
+    .aside {
+      width: var(--aside-width);
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      transform: translateX(0);
+      transition: transform 0.25s ease, width 0.25s ease;
+      overflow: hidden;
+    }
+    .aside.hidden {
+      width: 0;
+      transform: translateX(100%);
+    }
+
+    .aside-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .aside-header h2 {
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .aside-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .aside-section {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .aside-section-title {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-dim);
+      padding: 0 4px;
+    }
+
+    /* Stats card */
+    .stats-card {
+      background: var(--tool-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .stat-value {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .stat-label {
+      font-size: 10px;
+      color: var(--text-dim);
+    }
+
+    /* Provider list */
+    .provider-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .provider-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      background: var(--tool-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .provider-item:hover {
+      border-color: var(--text-muted);
+    }
+    .provider-item.active {
+      border-color: var(--green);
+      background: var(--green-dim);
+    }
+    .provider-item.error {
+      opacity: 0.5;
+    }
+    .provider-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+    .provider-dot.error { background: var(--red); }
+    .provider-dot.warning { background: var(--yellow); }
+    .provider-name {
+      flex: 1;
+      color: var(--text);
+      font-weight: 500;
+    }
+    .provider-failures {
+      font-size: 10px;
+      color: var(--text-dim);
+    }
+
+    /* Tools list */
+    .tools-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .tool-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      font-size: 11px;
+      font-family: monospace;
+      color: var(--text-muted);
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .tool-item:hover {
+      background: var(--surface-hover);
+      color: var(--accent);
+    }
+    .tool-item-icon {
+      width: 16px;
+      text-align: center;
+    }
+
+    /* Session info */
+    .session-info {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 10px;
+      background: var(--tool-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 11px;
+    }
+    .session-row {
+      display: flex;
+      justify-content: space-between;
+      color: var(--text-muted);
+    }
+    .session-row span:last-child {
+      color: var(--text);
+      font-family: monospace;
+    }
+
+    /* ── Markdown ── */
+    .bubble strong { font-weight: 700; }
+    .bubble code {
+      background: rgba(255,255,255,.08);
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 13px;
+    }
+    .bubble pre {
+      background: rgba(0,0,0,.4);
+      padding: 10px;
+      border-radius: 8px;
+      overflow-x: auto;
+      margin: 6px 0;
+    }
+    .bubble pre code { background: none; padding: 0; }
+
+    /* Scrollbar */
+    #chat::-webkit-scrollbar, .aside-body::-webkit-scrollbar { width: 6px; }
+    #chat::-webkit-scrollbar-track, .aside-body::-webkit-scrollbar-track { background: transparent; }
+    #chat::-webkit-scrollbar-thumb, .aside-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ── WS Modal ── */
+    .ws-modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.55);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+    }
+    .ws-modal-backdrop.open { display: flex; }
+    .ws-modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      width: 480px;
+      max-width: 95vw;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .ws-modal h3 { font-size: 14px; font-weight: 600; }
+    .ws-modal input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 13px;
+      padding: 9px 12px;
+      outline: none;
+      width: 100%;
+      font-family: monospace;
+    }
+    .ws-modal input:focus { border-color: var(--accent); }
+    .ws-modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+    .ws-error { font-size: 12px; color: var(--red); min-height: 16px; }
+
+    .ws-breadcrumb {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 2px;
+      font-size: 12px;
+      font-family: monospace;
+      padding: 6px 8px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      min-height: 30px;
+    }
+    .ws-bc-part {
+      color: var(--accent);
+      cursor: pointer;
+      padding: 1px 3px;
+      border-radius: 3px;
+    }
+    .ws-bc-part:hover { background: rgba(88,166,255,.15); }
+    .ws-bc-sep { color: var(--text-muted); padding: 0 1px; }
+
+    .ws-dir-list {
+      max-height: 175px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+    }
+    .ws-dir-list::-webkit-scrollbar { width: 4px; }
+    .ws-dir-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .ws-dir-item {
+      padding: 6px 10px;
+      font-size: 12px;
+      font-family: monospace;
+      cursor: pointer;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .ws-dir-item:hover { background: rgba(88,166,255,.1); color: var(--accent); }
+    .ws-dir-loading, .ws-dir-empty { padding: 10px; font-size: 12px; color: var(--text-muted); text-align: center; }
+    .ws-dir-error { padding: 10px; font-size: 12px; color: var(--red); text-align: center; }
+
+    .ws-recent-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      color: var(--text-muted);
+      padding: 6px 2px 2px;
+    }
+    .ws-recent-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      max-height: 110px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+    }
+    .ws-recent-list::-webkit-scrollbar { width: 4px; }
+    .ws-recent-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .ws-recent-item {
+      padding: 5px 10px;
+      font-size: 12px;
+      font-family: monospace;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+    .ws-recent-item:hover { background: rgba(88,166,255,.1); }
+    .ws-recent-item .ws-ri-name { color: var(--text); font-weight: 600; }
+    .ws-recent-item .ws-ri-path { color: var(--text-muted); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* ── Git Panel ── */
+    .git-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.45);
+      z-index: 99;
+    }
+    .git-overlay.open { display: block; }
+
+    .git-panel {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: 340px;
+      height: 100dvh;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      transform: translateX(100%);
+      transition: transform .22s ease;
+      z-index: 100;
+    }
+    .git-panel.open { transform: translateX(0); }
+
+    .git-panel-header {
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .git-panel-header h3 { font-size: 14px; font-weight: 600; flex: 1; }
+
+    .git-panel-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .git-panel-body::-webkit-scrollbar { width: 4px; }
+    .git-panel-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .git-info-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+      padding: 6px 10px;
+      background: var(--tool-bg);
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+    .git-info-bar .refresh-btn {
+      margin-left: auto;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 14px;
+      padding: 0 2px;
+    }
+    .git-info-bar .refresh-btn:hover { color: var(--text); }
+
+    .git-section { display: flex; flex-direction: column; gap: 2px; }
+    .git-section-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 2px 4px 4px;
+    }
+
+    .git-file {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 6px;
+      border-radius: 5px;
+      font-size: 12px;
+      font-family: monospace;
+    }
+    .git-file:hover { background: rgba(255,255,255,.04); }
+    .git-file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+
+    .sbadge {
+      width: 15px;
+      height: 15px;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .sbadge-M { background: rgba(210,153,34,.2); color: var(--yellow); }
+    .sbadge-A { background: rgba(63,185,80,.2); color: var(--green); }
+    .sbadge-D { background: rgba(248,81,73,.2); color: var(--red); }
+    .sbadge-U { background: rgba(88,166,255,.2); color: var(--accent); }
+    .sbadge-q { background: rgba(125,133,144,.15); color: var(--text-muted); }
+
+    .fbn {
+      padding: 1px 6px;
+      font-size: 11px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+      color: var(--text-muted);
+      flex-shrink: 0;
+      line-height: 1.6;
+    }
+    .fbn:hover { color: var(--text); border-color: var(--text-muted); }
+    .fbn.g:hover { color: var(--green); border-color: var(--green); }
+    .fbn.r:hover { color: var(--red); border-color: var(--red); }
+    .fbn.y:hover { color: var(--yellow); border-color: var(--yellow); }
+
+    .git-empty { font-size: 11px; color: var(--text-muted); padding: 4px 8px; }
+
+    .commit-area { display: flex; flex-direction: column; gap: 6px; }
+    .commit-area textarea {
+      min-height: 56px;
+      max-height: 100px;
+      font-size: 12px;
+      padding: 8px 10px;
+    }
+    .commit-btn {
+      background: var(--green);
+      color: #000;
+      border: none;
+      border-radius: 6px;
+      padding: 7px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+    }
+    .commit-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+    .git-log-item {
+      display: flex;
+      gap: 6px;
+      align-items: baseline;
+      font-size: 11px;
+      padding: 3px 6px;
+      border-radius: 4px;
+    }
+    .git-log-item:hover { background: rgba(255,255,255,.04); }
+    .log-hash { color: var(--accent); font-family: monospace; flex-shrink: 0; }
+    .log-msg { color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .log-date { color: var(--text-muted); flex-shrink: 0; font-size: 10px; }
+
+    .git-divider { border: none; border-top: 1px solid var(--border); margin: 2px 0; }
+  </style>
+</head>
+<body>
+
+<div class="app-container">
+  <div class="main-area">
+    <header>
+      <div class="header-left">
+        <div class="status-indicator">
+          <div class="dot" id="status-dot"></div>
+          <span class="status-text" id="status-text" style="font-size: 11px; color: var(--text-muted);"></span>
+        </div>
+        <h1>🤖 MCP Dev Agent</h1>
+      </div>
+
+      <div class="header-center">
+        <div class="ws-pill" onclick="openWsModal()" title="Cambiar directorio de trabajo">
+          📁 <span class="ws-name" id="ws-name">...</span>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <div class="model-badge" id="model-badge">
+          <span class="label">Modelo activo</span>
+          <span class="model-name">
+            <span id="model-name">cargando...</span>
+          </span>
+        </div>
+        <button class="toggle-aside" onclick="toggleAside()" title="Panel lateral">☰</button>
+      </div>
+    </header>
+
+    <div id="chat"></div>
+
+    <footer>
+      <div class="input-wrapper">
+        <textarea id="input" placeholder="Describe tu tarea de desarrollo... (Enter para enviar, Shift+Enter para nueva línea)" rows="1"></textarea>
+        <button id="send-btn" onclick="sendMessage()">Enviar</button>
+      </div>
+      <div class="actions">
+        <button class="btn-sm" onclick="clearHistory()">🗑️ Limpiar</button>
+        <button class="btn-sm" onclick="showTools()">🔧 Herramientas</button>
+        <button class="btn-sm" onclick="showStats()">📊 Stats</button>
+        <button class="btn-sm" onclick="openGitPanel()">🌿 Git</button>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Aside Panel -->
+  <aside class="aside" id="aside">
+    <div class="aside-header">
+      <h2>⚙️ Panel de Control</h2>
+      <button class="btn-sm" onclick="toggleAside()" style="padding: 4px 8px;">✕</button>
+    </div>
+    <div class="aside-body">
+      <div class="aside-section">
+        <div class="aside-section-title">📊 Estadísticas de Sesión</div>
+        <div class="stats-card">
+          <div class="stat-item">
+            <span class="stat-value" id="stat-messages">0</span>
+            <span class="stat-label">Mensajes</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value" id="stat-iterations">0</span>
+            <span class="stat-label">Iteraciones</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value" id="stat-tools">0</span>
+            <span class="stat-label">Tool Calls</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value" id="stat-msgs-context">0</span>
+            <span class="stat-label">En Contexto</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="aside-section">
+        <div class="aside-section-title">🔄 Proveedores LLM</div>
+        <div class="provider-list" id="provider-list">
+          <div class="git-empty" style="text-align:center;padding:10px">Cargando...</div>
+        </div>
+      </div>
+
+      <div class="aside-section">
+        <div class="aside-section-title">🔧 Herramientas Disponibles</div>
+        <div class="tools-list" id="tools-list">
+          <div class="git-empty" style="text-align:center;padding:10px">Cargando...</div>
+        </div>
+      </div>
+
+      <div class="aside-section">
+        <div class="aside-section-title">💻 Sesión Actual</div>
+        <div class="session-info">
+          <div class="session-row">
+            <span>Workspace</span>
+            <span id="session-ws">...</span>
+          </div>
+          <div class="session-row">
+            <span>Inicio</span>
+            <span id="session-start">...</span>
+          </div>
+          <div class="session-row">
+            <span>Modelo</span>
+            <span id="session-model">...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- WS Modal -->
+<div class="ws-modal-backdrop" id="ws-backdrop" onclick="closeWsModal()">
+  <div class="ws-modal" onclick="event.stopPropagation()">
+    <h3>📁 Cambiar directorio de trabajo</h3>
+    <div class="ws-breadcrumb" id="ws-breadcrumb"></div>
+    <input id="ws-input" type="text" placeholder="/home/usuario/mi-proyecto" spellcheck="false" />
+    <div class="ws-dir-list" id="ws-dir-list"></div>
+    <div id="ws-recent-section" style="display:none">
+      <div class="ws-recent-title">Recientes</div>
+      <div class="ws-recent-list" id="ws-recent-list"></div>
+    </div>
+    <div class="ws-error" id="ws-error"></div>
+    <div class="ws-modal-actions">
+      <button class="btn-sm" onclick="closeWsModal()">Cancelar</button>
+      <button onclick="applyWorkspace()" style="padding:7px 16px;font-size:13px">Aplicar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Git Panel -->
+<div class="git-overlay" id="git-overlay" onclick="closeGitPanel()"></div>
+<div class="git-panel" id="git-panel">
+  <div class="git-panel-header">
+    <span>🌿</span>
+    <h3>Git</h3>
+    <button class="btn-sm" onclick="closeGitPanel()" style="margin-left:auto">✕</button>
+  </div>
+  <div class="git-panel-body" id="git-panel-body">
+    <div class="git-empty" style="text-align:center;padding:20px">Cargando...</div>
+  </div>
+</div>
+
+<script>
+  const chat = document.getElementById("chat");
+  const input = document.getElementById("input");
+  const sendBtn = document.getElementById("send-btn");
+  const statusDot = document.getElementById("status-dot");
+  const asideEl = document.getElementById("aside");
+  let busy = false;
+  let currentModel = "";
+  let currentProvider = "";
+  let sessionStart = new Date();
+  let lastIterationCount = 0;
+  let lastToolCalls = 0;
+
+  // ── Helpers ───────────────────────────────────────────────────────────────────
+  function escHtml(s) {
+    return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+  function escAttr(s) {
+    return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+  }
+  function formatTime(date) {
+    return date.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" });
+  }
+
+  // ── Toggle Aside ─────────────────────────────────────────────────────────────
+  function toggleAside() {
+    asideEl.classList.toggle("hidden");
+  }
+
+  // ── Update model badge (called during and after messages) ───────────────────
+  async function updateModelBadge() {
+    try {
+      const s = await fetch("/stats").then(r => r.json());
+      const modelEl = document.getElementById("model-name");
+      if (s.model && s.model !== currentModel) {
+        currentModel = s.model;
+        currentProvider = s.provider;
+        modelEl.textContent = s.model;
+      }
+      document.getElementById("model-badge").title = `Proveedor: ${s.provider}`;
+    } catch (e) { console.error("Error updating model:", e); }
+  }
+
+  // ── Load all stats and update UI ─────────────────────────────────────────────
+  async function refreshStats() {
+    try {
+      const s = await fetch("/stats").then(r => r.json());
+      
+      // Update header badge
+      currentModel = s.model || "";
+      currentProvider = s.provider || "";
+      document.getElementById("model-name").textContent = s.model || "—";
+      
+      // Update aside stats
+      document.getElementById("stat-messages").textContent = s.messages || 0;
+      document.getElementById("stat-iterations").textContent = s.iterations || 0;
+      document.getElementById("stat-tools").textContent = s.toolCalls || 0;
+      document.getElementById("stat-msgs-context").textContent = s.messages || 0;
+
+      // Update session info
+      document.getElementById("session-model").textContent = (s.model || "—").split("/").pop();
+
+      // Update provider list in aside
+      const pl = document.getElementById("provider-list");
+      if (s.providers && s.providers.length) {
+        pl.innerHTML = s.providers.map(p => `
+          <div class="provider-item ${p.active ? 'active' : ''} ${p.failures > 2 ? 'error' : ''}">
+            <span class="provider-dot ${p.failures > 2 ? 'error' : p.active ? '' : 'warning'}"></span>
+            <span class="provider-name">${escHtml(p.name)}</span>
+            ${p.failures > 0 ? `<span class="provider-failures">⚠${p.failures}</span>` : ''}
+          </div>
+        `).join("");
+      }
+
+      // Store for done meta
+      lastIterationCount = s.iterations || 0;
+      lastToolCalls = s.toolCalls || 0;
+    } catch (e) { console.error("Error refreshStats:", e); }
+  }
+
+  // ── Load tools list ──────────────────────────────────────────────────────────
+  async function loadToolsList() {
+    try {
+      const tools = await fetch("/tools").then(r => r.json());
+      const tl = document.getElementById("tools-list");
+      tl.innerHTML = tools.slice(0, 15).map(t => `
+        <div class="tool-item" title="${escHtml(t.description || '')}">
+          <span class="tool-item-icon">⚙</span>
+          ${escHtml(t.name)}
+        </div>
+      `).join("");
+      if (tools.length > 15) {
+        tl.innerHTML += `<div class="tool-item" style="color:var(--text-dim)">...y ${tools.length - 15} más</div>`;
+      }
+    } catch (e) { console.error("Error loadToolsList:", e); }
+  }
+
+  // ── Init ─────────────────────────────────────────────────────────────────────
+  fetch("/stats").then(r => r.json()).then(s => {
+    currentModel = s.model || "";
+    currentProvider = s.provider || "";
+    document.getElementById("model-name").textContent = s.model || "cargando...";
+  });
+
+  async function loadWorkspaceLabel() {
+    const { path } = await fetch("/workspace").then(r => r.json());
+    document.getElementById("ws-name").textContent = path.split("/").pop() || path;
+    document.getElementById("ws-name").title = path;
+    document.getElementById("session-ws").textContent = path.split("/").pop() || path;
+  }
+
+  sessionStart = new Date();
+  document.getElementById("session-start").textContent = formatTime(sessionStart);
+
+  // Initialize async
+  (async () => {
+    await loadChatHistory();
+    if (!chatLoaded) {
+      addMessage("agent", "¡Hola! Soy tu agente de desarrollo. Describe la tarea que quieres realizar y me pondré a trabajar.", { model: currentModel });
+    }
+  })();
+
+  loadWorkspaceLabel();
+  refreshStats();
+  loadToolsList();
+
+  // Polling for model changes
+  setInterval(() => {
+    if (!busy) refreshStats();
+  }, 3000);
+
+  // ── Chat Persistence (localStorage) ───────────────────────────────────────────
+  const CHAT_HISTORY_KEY = "mcp-chat-history";
+  const CHAT_WORKSPACE_KEY = "mcp-chat-workspace";
+  let chatLoaded = false;
+
+  function saveChatMessage(role, html, meta = {}) {
+    try {
+      const history = JSON.parse(localStorage.getItem(CHAT_HISTORY_KEY) || "[]");
+      history.push({
+        role,
+        html,
+        meta,
+        timestamp: Date.now()
+      });
+      if (history.length > 100) {
+        localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(history.slice(-100)));
+      } else {
+        localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(history));
+      }
+    } catch (e) { console.error("Error saving chat:", e); }
+  }
+
+  async function loadChatHistory() {
+    try {
+      const { path: currentPath } = await fetch("/workspace").then(r => r.json());
+      const savedWorkspace = localStorage.getItem(CHAT_WORKSPACE_KEY);
+      const history = JSON.parse(localStorage.getItem(CHAT_HISTORY_KEY) || "[]");
+      
+      if (history.length > 0 && savedWorkspace === currentPath) {
+        chat.innerHTML = "";
+        for (const msg of history) {
+          const div = document.createElement("div");
+          div.className = `msg ${msg.role}`;
+          let metaHtml = "";
+          if (msg.role === "user") {
+            metaHtml = `<div class="msg-meta"><span class="msg-time">${formatTime(new Date(msg.timestamp))}</span></div>`;
+          } else if (msg.meta && msg.meta.model) {
+            metaHtml = `<div class="msg-meta"><span class="msg-model">${escHtml(msg.meta.model)}</span><span class="msg-time">${formatTime(new Date(msg.timestamp))}</span></div>`;
+          }
+          div.innerHTML = `
+            <div class="msg-avatar">${msg.role === "user" ? "🧑" : "🤖"}</div>
+            <div class="msg-content">
+              ${metaHtml}
+              <div class="bubble">${msg.html}</div>
+            </div>`;
+          chat.appendChild(div);
+        }
+        const div = document.createElement("div");
+        div.className = "msg agent";
+        div.innerHTML = `<div class="msg-avatar">🤖</div><div class="msg-content"><div class="bubble" style="color:var(--text-muted)">📜 Chat restaurado. Continúa escribiendo...</div></div>`;
+        chat.appendChild(div);
+        scrollBottom();
+        chatLoaded = true;
+      }
+      localStorage.setItem(CHAT_WORKSPACE_KEY, currentPath);
+    } catch (e) {
+      console.error("Error loading chat:", e);
+    }
+  }
+
+  function saveWorkspace() {
+    fetch("/workspace").then(r => r.json()).then(({ path }) => {
+      localStorage.setItem(CHAT_WORKSPACE_KEY, path);
+    });
+  }
+
+  function clearChatHistory() {
+    localStorage.removeItem(CHAT_HISTORY_KEY);
+  }
+
+  // ── WS History ───────────────────────────────────────────────────────────────
+  const WS_HISTORY_KEY = "mcp-ws-history";
+  function getWsHistory() {
+    try { return JSON.parse(localStorage.getItem(WS_HISTORY_KEY) || "[]"); } catch { return []; }
+  }
+  function addToWsHistory(p) {
+    let h = getWsHistory().filter(x => x !== p);
+    h.unshift(p);
+    if (h.length > 8) h = h.slice(0, 8);
+    localStorage.setItem(WS_HISTORY_KEY, JSON.stringify(h));
+  }
+  function renderRecentPaths() {
+    const h = getWsHistory();
+    const section = document.getElementById("ws-recent-section");
+    const list = document.getElementById("ws-recent-list");
+    if (h.length === 0) { section.style.display = "none"; return; }
+    section.style.display = "block";
+    list.innerHTML = h.map(p =>
+      `<div class="ws-recent-item" data-path="${escAttr(p)}">
+        <span class="ws-ri-name">${escHtml(p.split("/").filter(Boolean).pop() || p)}</span>
+        <span class="ws-ri-path">${escHtml(p)}</span>
+      </div>`
+    ).join("");
+  }
+
+  // ── WS Directory Browser ───────────────────────────────────────────────────
+  let wsBrowseTimer = null;
+
+  function loadDirBrowser(dirPath) {
+    const listEl = document.getElementById("ws-dir-list");
+    listEl.innerHTML = '<div class="ws-dir-loading">Cargando...</div>';
+
+    fetch(`/browse?path=${encodeURIComponent(dirPath)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) {
+          listEl.innerHTML = `<div class="ws-dir-error">${escHtml(data.error)}</div>`;
+          renderBreadcrumb(dirPath);
+          return;
+        }
+        document.getElementById("ws-input").value = data.path;
+        renderBreadcrumb(data.path);
+        if (data.dirs.length === 0) {
+          listEl.innerHTML = '<div class="ws-dir-empty">Sin subdirectorios</div>';
+          return;
+        }
+        listEl.innerHTML = data.dirs.map(d => {
+          const full = data.path.replace(/\/$/, "") + "/" + d;
+          return `<div class="ws-dir-item" data-path="${escAttr(full)}">📁 ${escHtml(d)}</div>`;
+        }).join("");
+      })
+      .catch(err => {
+        listEl.innerHTML = `<div class="ws-dir-error">Error: ${escHtml(err.message)}</div>`;
+      });
+  }
+
+  function renderBreadcrumb(fullPath) {
+    const el = document.getElementById("ws-breadcrumb");
+    const parts = fullPath.split("/").filter(Boolean);
+    let html = `<span class="ws-bc-part" data-bc="/">/</span>`;
+    let acc = "";
+    for (const part of parts) {
+      acc += "/" + part;
+      html += `<span class="ws-bc-sep">›</span><span class="ws-bc-part" data-bc="${escAttr(acc)}">${escHtml(part)}</span>`;
+    }
+    el.innerHTML = html;
+  }
+
+  document.getElementById("ws-breadcrumb").addEventListener("click", e => {
+    const part = e.target.closest("[data-bc]");
+    if (part) loadDirBrowser(part.dataset.bc);
+  });
+  document.getElementById("ws-dir-list").addEventListener("click", e => {
+    const item = e.target.closest(".ws-dir-item");
+    if (item) loadDirBrowser(item.dataset.path);
+  });
+  document.getElementById("ws-recent-list").addEventListener("click", e => {
+    const item = e.target.closest(".ws-recent-item");
+    if (item) loadDirBrowser(item.dataset.path);
+  });
+
+  function openWsModal() {
+    fetch("/workspace").then(r => r.json()).then(({ path }) => {
+      document.getElementById("ws-input").value = path;
+      document.getElementById("ws-error").textContent = "";
+      loadDirBrowser(path);
+      renderRecentPaths();
+    });
+    document.getElementById("ws-backdrop").classList.add("open");
+    setTimeout(() => document.getElementById("ws-input").focus(), 50);
+  }
+
+  function closeWsModal() {
+    document.getElementById("ws-backdrop").classList.remove("open");
+  }
+
+  document.getElementById("ws-input").addEventListener("input", () => {
+    clearTimeout(wsBrowseTimer);
+    wsBrowseTimer = setTimeout(() => {
+      const v = document.getElementById("ws-input").value.trim();
+      if (v) loadDirBrowser(v);
+    }, 450);
+  });
+
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") closeWsModal();
+    if (e.key === "Enter" && document.getElementById("ws-backdrop").classList.contains("open")) applyWorkspace();
+  });
+
+  async function applyWorkspace() {
+    const newPath = document.getElementById("ws-input").value.trim();
+    const errEl = document.getElementById("ws-error");
+    errEl.textContent = "";
+    if (!newPath) return;
+
+    const res = await fetch("/workspace", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: newPath }),
+    });
+    const data = await res.json();
+
+    if (!data.ok) {
+      errEl.textContent = data.error;
+      return;
+    }
+
+    addToWsHistory(data.path);
+    closeWsModal();
+    loadWorkspaceLabel();
+    loadGitPanel();
+    chat.innerHTML = "";
+    clearChatHistory();
+    addMessage("agent", `✅ Workspace cambiado a <code>${escHtml(data.path)}</code>\nHistorial limpiado. ¿En qué puedo ayudarte?`);
+  }
+
+  // ── Input handling ────────────────────────────────────────────────────────────
+  input.addEventListener("input", () => {
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 160) + "px";
+  });
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  });
+
+  // ── UI Helpers ───────────────────────────────────────────────────────────────
+  function setBusy(state) {
+    busy = state;
+    sendBtn.disabled = state;
+    statusDot.className = "dot" + (state ? " busy" : "");
+    document.getElementById("status-text").textContent = state ? "Procesando..." : "";
+  }
+
+  function scrollBottom() {
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  function renderMarkdown(text) {
+    // Code blocks first (don't process their content)
+    const blocks = [];
+    text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+      const idx = blocks.length;
+      blocks.push(`<pre><code class="lang-${escHtml(lang)}">${escHtml(code.trim())}</code></pre>`);
+      return `\x00BLOCK${idx}\x00`;
+    });
+
+    // Inline code
+    text = text.replace(/`([^`\n]+)`/g, (_, c) => `<code>${escHtml(c)}</code>`);
+
+    // Bold & italic
+    text = text.replace(/\*\*\*(.+?)\*\*\*/g, "<strong><em>$1</em></strong>");
+    text = text.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    text = text.replace(/\*([^*\n]+?)\*/g, "<em>$1</em>");
+
+    // Process line by line for headers and lists
+    const lines = text.split("\n");
+    const out = [];
+    let inList = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      // Headers
+      const hm = line.match(/^(#{1,3})\s+(.+)/);
+      if (hm) {
+        if (inList) { out.push("</ul>"); inList = false; }
+        const level = Math.min(hm[1].length + 3, 6);
+        out.push(`<h${level} style="margin:8px 0 4px;font-size:${15 - hm[1].length}px">${hm[2]}</h${level}>`);
+        continue;
+      }
+      // List items
+      const lm = line.match(/^(\s*[-*•]\s+)(.+)/);
+      if (lm) {
+        if (!inList) { out.push('<ul style="margin:4px 0;padding-left:18px;list-style:disc">'); inList = true; }
+        out.push(`<li style="margin:2px 0">${lm[2]}</li>`);
+        continue;
+      }
+      // Numbered list
+      const nlm = line.match(/^(\s*\d+\.\s+)(.+)/);
+      if (nlm) {
+        if (inList) { out.push("</ul>"); inList = false; }
+        // Just treat as a normal line for now (simplified)
+        out.push(line);
+        continue;
+      }
+      // Close list
+      if (inList && line.trim() === "") {
+        out.push("</ul>"); inList = false;
+      }
+      out.push(line);
+    }
+    if (inList) out.push("</ul>");
+    text = out.join("\n");
+
+    // Restore code blocks
+    text = text.replace(/\x00BLOCK(\d+)\x00/g, (_, i) => blocks[i]);
+
+    // Horizontal rules
+    text = text.replace(/^---+$/gm, '<hr style="border:none;border-top:1px solid var(--border);margin:8px 0">');
+
+    return text;
+  }
+
+  function addMessage(role, html, meta = {}) {
+    const div = document.createElement("div");
+    div.className = `msg ${role}`;
+    
+    let metaHtml = "";
+    if (role === "user") {
+      metaHtml = `<div class="msg-meta"><span class="msg-time">${formatTime(new Date())}</span></div>`;
+    } else if (meta.model) {
+      metaHtml = `<div class="msg-meta"><span class="msg-model">${escHtml(meta.model)}</span><span class="msg-time">${formatTime(new Date())}</span></div>`;
+    }
+
+    div.innerHTML = `
+      <div class="msg-avatar">${role === "user" ? "🧑" : "🤖"}</div>
+      <div class="msg-content">
+        ${metaHtml}
+        <div class="bubble">${html}</div>
+      </div>`;
+    chat.appendChild(div);
+    scrollBottom();
+    
+    // Save to localStorage
+    saveChatMessage(role, html, meta);
+    saveWorkspace();
+    
+    return div;
+  }
+
+  const TOOL_ICONS = {
+    read_file: "📄", write_file: "✏️", list_directory: "📂", delete_file: "🗑️",
+    create_directory: "📁", run_command: "⚡", git_init: "🌿", git_commit: "📝",
+    git_status: "🔍", git_add: "➕", git_diff: "🔀", git_log: "📜",
+    search_files: "🔎", search_code: "🔎", replace_in_file: "🔄",
+    fetch_url: "🌐", http_request: "🌐",
+  };
+
+  function addToolCall(name, args, status = "ejecutando") {
+    const icon = TOOL_ICONS[name] || "⚙️";
+    const argsFormatted = JSON.stringify(args, null, 2);
+    const previewPairs = Object.entries(args || {})
+      .slice(0, 2)
+      .map(([k, v]) => `${k}: ${String(v).slice(0, 40)}`)
+      .join(", ");
+    const statusClass = status === "hecho" ? "done" : status === "error" ? "error" : "running";
+
+    const div = document.createElement("div");
+    div.className = "tool-call";
+    div.innerHTML = `
+      <div class="tool-call-header">
+        <div class="tool-icon">${icon}</div>
+        <div class="tool-info">
+          <span class="tool-name">${escHtml(name)}</span>
+          <span class="tool-args-preview">${escHtml(previewPairs)}</span>
+        </div>
+        <span class="tool-status ${statusClass}">${escHtml(status)}</span>
+        <span class="tool-expand-icon">▶</span>
+      </div>
+      <div class="tool-args-body">${escHtml(argsFormatted)}</div>`;
+    div.addEventListener("click", () => div.classList.toggle("expanded"));
+    chat.appendChild(div);
+    scrollBottom();
+    return div;
+  }
+
+  function addProviderSwitch(from, reason) {
+    // Parse reason: may be "error de red", "rate limit", provider name, etc.
+    const isError = /error|fail|timeout/i.test(reason);
+    const isLimit = /rate|limit|quota/i.test(reason);
+    const icon = isError ? "🔴" : isLimit ? "🟡" : "🔄";
+
+    const div = document.createElement("div");
+    div.className = "provider-switch";
+    div.innerHTML = `
+      <div class="provider-switch-row">
+        <span>${icon}</span>
+        <span class="ps-label">Cambio de proveedor</span>
+      </div>
+      <div class="provider-switch-row">
+        <span class="ps-from">${escHtml(from)}</span>
+        <span class="ps-arrow">→</span>
+        <span class="ps-to">${escHtml(reason)}</span>
+      </div>`;
+    chat.appendChild(div);
+    scrollBottom();
+    return div;
+  }
+
+  function addDoneMeta(iterations, toolCalls) {
+    const div = document.createElement("div");
+    div.className = "done-meta";
+    div.innerHTML = `
+      <span>✅ Completado</span>
+      <span class="dm-sep">·</span>
+      <span>⟳ ${iterations} iter.</span>
+      <span class="dm-sep">·</span>
+      <span>🔧 ${toolCalls} tools</span>`;
+    chat.appendChild(div);
+    scrollBottom();
+    return div;
+  }
+
+  function addTyping() {
+    const div = document.createElement("div");
+    div.className = "msg agent";
+    div.id = "typing";
+    div.innerHTML = `<div class="msg-avatar">🤖</div>
+      <div class="msg-content">
+        <div class="msg-meta"><span class="typing-status">🤔 Pensando...</span></div>
+        <div class="bubble"><div class="typing"><span></span><span></span><span></span></div></div>
+      </div>`;
+    chat.appendChild(div);
+    scrollBottom();
+    return div;
+  }
+
+  // ── Send message ─────────────────────────────────────────────────────────────
+  async function sendMessage() {
+    const text = input.value.trim();
+    if (!text || busy) return;
+
+    input.value = "";
+    input.style.height = "auto";
+    setBusy(true);
+
+    addMessage("user", escHtml(text));
+    const typing = addTyping();
+
+    // Update model before starting
+    await updateModelBadge();
+
+    try {
+      const res = await fetch("/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text }),
+      });
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split("\n");
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const event = JSON.parse(line.slice(6));
+
+          if (event.type === "tool") {
+            typing.remove();
+            addToolCall(event.name, event.args, "hecho");
+            addTyping();
+
+          } else if (event.type === "providerSwitch") {
+            typing.remove();
+            addProviderSwitch(event.from, event.reason);
+            addTyping();
+            await updateModelBadge();
+
+          } else if (event.type === "done") {
+            typing.remove();
+            addMessage("agent", renderMarkdown(event.content), { model: currentModel });
+            addDoneMeta(event.iterations, event.toolCalls);
+            refreshStats();
+
+          } else if (event.type === "error") {
+            typing.remove();
+            addMessage("agent", `<span style="color:var(--red)">❌ ${escHtml(event.message)}</span>`);
+          }
+        }
+      }
+    } catch (err) {
+      document.getElementById("typing")?.remove();
+      addMessage("agent", `<span style="color:var(--red)">❌ Error de conexión: ${escHtml(err.message)}</span>`);
+    } finally {
+      setBusy(false);
+      input.focus();
+    }
+  }
+
+  // ── Actions ─────────────────────────────────────────────────────────────────
+  async function clearHistory() {
+    await fetch("/clear", { method: "POST" });
+    chat.innerHTML = "";
+    clearChatHistory();
+    addMessage("agent", "Historial limpiado. ¿En qué puedo ayudarte?");
+    refreshStats();
+  }
+
+  async function showTools() {
+    const tools = await fetch("/tools").then(r => r.json());
+    const list = tools.map(t => `• <strong>${t.name}</strong>: ${escHtml(t.description || "").substring(0, 60)}`).join("\n");
+    addMessage("agent", `📋 <strong>Herramientas disponibles (${tools.length})</strong>\n\n${list}`, { model: currentModel });
+  }
+
+  async function showStats() {
+    const s = await fetch("/stats").then(r => r.json());
+    addMessage("agent",
+      `📊 <strong>Estadísticas de Sesión</strong>\n\n` +
+      `• <strong>Modelo:</strong> ${escHtml(s.model)}\n` +
+      `• <strong>Proveedor:</strong> ${escHtml(s.provider)}\n` +
+      `• <strong>Mensajes:</strong> ${s.messages}\n` +
+      `• <strong>Iteraciones:</strong> ${s.iterations}\n` +
+      `• <strong>Tool calls:</strong> ${s.toolCalls}`,
+      { model: currentModel }
+    );
+  }
+
+  // ── Git Panel ────────────────────────────────────────────────────────────────
+  const gitPanelEl  = document.getElementById("git-panel");
+  const gitOverlayEl = document.getElementById("git-overlay");
+  const gitBodyEl   = document.getElementById("git-panel-body");
+
+  function openGitPanel() {
+    gitPanelEl.classList.add("open");
+    gitOverlayEl.classList.add("open");
+    loadGitPanel();
+  }
+
+  function closeGitPanel() {
+    gitPanelEl.classList.remove("open");
+    gitOverlayEl.classList.remove("open");
+  }
+
+  async function loadGitPanel() {
+    gitBodyEl.innerHTML = '<div class="git-empty" style="text-align:center;padding:20px">Cargando...</div>';
+    const [info, log] = await Promise.all([
+      fetch("/git/info").then(r => r.json()).catch(() => null),
+      fetch("/git/log").then(r => r.json()).catch(() => []),
+    ]);
+    if (!info || info.error) {
+      gitBodyEl.innerHTML = `<div class="git-empty" style="text-align:center;padding:20px">⚠️ ${escHtml(info?.error || "Error al cargar git info")}</div>`;
+      return;
+    }
+    try {
+      renderGitPanel(info, log);
+    } catch (err) {
+      gitBodyEl.innerHTML = `<div class="git-empty" style="text-align:center;padding:20px">⚠️ Error al renderizar: ${escHtml(err.message)}</div>`;
+    }
+  }
+
+  const STATUS_LABELS = { M: "M", A: "A", D: "D", R: "R", C: "C", U: "U" };
+
+  function sbadge(s) {
+    const cls = ["M","A","D"].includes(s) ? `sbadge-${s}` : "sbadge-U";
+    return `<span class="sbadge ${cls}">${escHtml(STATUS_LABELS[s] || s)}</span>`;
+  }
+
+  function renderGitPanel(info, log) {
+    let h = "";
+
+    h += `<div class="git-info-bar">
+      <span>📁 <strong>${escHtml(info.project)}</strong></span>
+      <span>·</span>
+      <span>🌿 ${escHtml(info.branch)}</span>
+      <button class="refresh-btn" onclick="loadGitPanel()" title="Actualizar">↺</button>
+    </div>`;
+
+    h += `<div class="git-section">
+      <div class="git-section-title">
+        <span>Staged <span style="color:var(--green)">(${info.staged.length})</span></span>
+        ${info.staged.length ? `<button class="fbn y" data-bulk="unstage-all">Unstage all</button>` : ""}
+      </div>`;
+    if (info.staged.length) {
+      for (const f of info.staged) {
+        h += `<div class="git-file">
+          ${sbadge(f.status)}
+          <span class="git-file-name" title="${escAttr(f.file)}">${escHtml(f.file)}</span>
+          <button class="fbn y" data-action="unstage" data-file="${escAttr(f.file)}" title="Unstage">↓</button>
+        </div>`;
+      }
+    } else {
+      h += `<div class="git-empty">Sin cambios staged</div>`;
+    }
+    h += `</div><hr class="git-divider">`;
+
+    h += `<div class="git-section">
+      <div class="git-section-title">
+        <span>Cambios <span style="color:var(--yellow)">(${info.unstaged.length})</span></span>
+        ${info.unstaged.length ? `<button class="fbn g" data-bulk="stage-all">Add all</button>` : ""}
+      </div>`;
+    if (info.unstaged.length) {
+      for (const f of info.unstaged) {
+        h += `<div class="git-file">
+          ${sbadge(f.status)}
+          <span class="git-file-name" title="${escAttr(f.file)}">${escHtml(f.file)}</span>
+          <button class="fbn g" data-action="stage" data-file="${escAttr(f.file)}" title="Stage">+</button>
+          <button class="fbn r" data-action="restore" data-file="${escAttr(f.file)}" title="Restaurar">⟳</button>
+        </div>`;
+      }
+    } else {
+      h += `<div class="git-empty">Sin cambios</div>`;
+    }
+    h += `</div><hr class="git-divider">`;
+
+    h += `<div class="git-section">
+      <div class="git-section-title">
+        <span>Sin seguimiento <span style="color:var(--text-muted)">(${info.untracked.length})</span></span>
+        ${info.untracked.length ? `<button class="fbn g" data-bulk="add-untracked">Add all</button>` : ""}
+      </div>`;
+    if (info.untracked.length) {
+      for (const f of info.untracked) {
+        h += `<div class="git-file">
+          <span class="sbadge sbadge-q">?</span>
+          <span class="git-file-name" title="${escAttr(f.file)}">${escHtml(f.file)}</span>
+          <button class="fbn g" data-action="stage" data-file="${escAttr(f.file)}" title="Agregar">+</button>
+          <button class="fbn r" data-action="remove" data-file="${escAttr(f.file)}" title="Eliminar archivo">🗑</button>
+        </div>`;
+      }
+    } else {
+      h += `<div class="git-empty">Sin archivos nuevos</div>`;
+    }
+    h += `</div><hr class="git-divider">`;
+
+    h += `<div class="commit-area">
+      <div class="git-section-title"><span>Commit</span></div>
+      <textarea id="commit-msg" placeholder="Mensaje del commit..."></textarea>
+      <button class="commit-btn" id="commit-btn" onclick="doCommit()"
+        ${info.staged.length === 0 ? "disabled" : ""}>
+        Commit staged (${info.staged.length})
+      </button>
+    </div><hr class="git-divider">`;
+
+    h += `<div class="git-section">
+      <div class="git-section-title"><span>Historial reciente</span></div>`;
+    if (log && log.length) {
+      for (const c of log) {
+        h += `<div class="git-log-item">
+          <span class="log-hash">${escHtml(c.hash)}</span>
+          <span class="log-msg" title="${escAttr(c.message)}">${escHtml(c.message)}</span>
+          <span class="log-date">${escHtml(c.date)}</span>
+        </div>`;
+      }
+    } else {
+      h += `<div class="git-empty">Sin commits</div>`;
+    }
+    h += `</div>`;
+
+    gitBodyEl.innerHTML = h;
+  }
+
+  gitBodyEl.addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-action],[data-bulk]");
+    if (!btn) return;
+
+    const action = btn.dataset.action;
+    const bulk   = btn.dataset.bulk;
+    const file   = btn.dataset.file;
+
+    btn.disabled = true;
+
+    try {
+      if (action === "stage") {
+        await fetch("/git/add", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ files: file }) });
+      } else if (action === "unstage") {
+        await fetch("/git/restore", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ files: file, staged: true }) });
+      } else if (action === "restore") {
+        if (!confirm(`¿Descartar cambios en "${file}"?\nEsta acción no se puede deshacer.`)) { btn.disabled = false; return; }
+        await fetch("/git/restore", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ files: file, staged: false }) });
+      } else if (action === "remove") {
+        if (!confirm(`¿Eliminar el archivo "${file}" del sistema de archivos?\nEsta acción no se puede deshacer.`)) { btn.disabled = false; return; }
+        const remRes = await fetch("/git/remove", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ files: file }) });
+        if (!remRes.ok) {
+          const remErr = await remRes.json();
+          alert("Error: " + remErr.out);
+          btn.disabled = false;
+          return;
+        }
+      } else if (bulk === "stage-all" || bulk === "add-untracked") {
+        await fetch("/git/add", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ files: "." }) });
+      } else if (bulk === "unstage-all") {
+        if (!confirm("¿Unstage de todos los archivos?")) { btn.disabled = false; return; }
+        await fetch("/git/restore", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ files: ".", staged: true }) });
+      }
+
+      await loadGitPanel();
+    } catch (err) {
+      console.error("Git action error:", err);
+      alert("Error: " + err);
+      btn.disabled = false;
+    }
+  });
+
+  async function doCommit() {
+    const msg = document.getElementById("commit-msg")?.value?.trim();
+    if (!msg) { alert("Ingresa un mensaje de commit"); return; }
+
+    const commitBtn = document.getElementById("commit-btn");
+    if (commitBtn) commitBtn.disabled = true;
+
+    const res  = await fetch("/git/commit", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ message: msg }),
+    });
+    const data = await res.json();
+
+    if (data.ok) {
+      addMessage("agent", `✅ Commit realizado:\n${escHtml(data.out)}`, { model: currentModel });
+      await loadGitPanel();
+    } else {
+      alert("Error al hacer commit:\n" + data.out);
+      if (commitBtn) commitBtn.disabled = false;
+    }
+  }
+</script>
+</body>
+</html>
