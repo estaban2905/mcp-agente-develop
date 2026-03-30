@@ -16,6 +16,7 @@ import chalk from "chalk";
 import { MCPClient } from "./mcp/client.js";
 import { DevAgent } from "./agent/agent.js";
 import { logger } from "./utils/logger.js";
+import type { ConfirmEvent } from "./types/index.js";
 
 // ─── Validaciones previas ─────────────────────────────────────────────────────
 
@@ -123,6 +124,16 @@ async function startInteractiveCLI(agent: DevAgent, mcpClient: MCPClient): Promi
 
   const question = (prompt: string): Promise<string> =>
     new Promise((resolve) => rl.question(prompt, resolve));
+
+  agent.events.on("confirm", async (event: ConfirmEvent) => {
+    console.log(chalk.yellow(`\n⚠️  Acción peligrosa — requiere autorización:`));
+    console.log(chalk.yellow(`   Herramienta : ${event.toolName}`));
+    console.log(chalk.yellow(`   Argumentos  : ${JSON.stringify(event.args)}`));
+    const answer = await question(chalk.bold.yellow("   ¿Autorizar? (s/n) › "));
+    const approved = ["s", "si", "sí", "y", "yes"].includes(answer.trim().toLowerCase());
+    event.resolve(approved);
+    console.log(approved ? chalk.green("   ✅ Autorizado.\n") : chalk.red("   ❌ Cancelado.\n"));
+  });
 
   console.log(chalk.green("✅ Agente listo. Escribe tu tarea o /demo para ver un ejemplo.\n"));
 

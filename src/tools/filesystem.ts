@@ -16,6 +16,7 @@ import type {
   WriteFileParams,
   ListDirectoryParams,
   DeleteFileParams,
+  DeleteDirectoryParams,
   CreateDirectoryParams,
   ApplyDiffParams,
   SearchFilesParams,
@@ -25,7 +26,10 @@ import type {
   MoveFileParams,
   CopyFileParams,
   ReplaceInFileParams,
+  SaveNoteParams,
 } from "../types/index.js";
+
+const NOTES_FILENAME = ".agent-notes.md";
 
 const execAsync = promisify(exec);
 
@@ -113,6 +117,19 @@ export async function writeFile({
     } catch (err) {
       if ((err as Error).message.includes("Usa read_file")) throw err;
       // Si find falla, continuar sin la sugerencia
+    }
+  } else {
+    // Protección anti-vaciado: si el archivo existente tiene contenido sustancial
+    // y el nuevo contenido es sospechosamente pequeño, bloquear la operación.
+    const existing = await fs.readFile(resolvedPath, "utf-8");
+    if (existing.trim().length > 100 && content.trim().length < existing.trim().length * 0.1) {
+      throw new Error(
+        `Protección anti-vaciado activada en "${filePath}":\n` +
+        `  Contenido actual: ${existing.trim().length} chars\n` +
+        `  Contenido nuevo:  ${content.trim().length} chars (reducción >90%)\n` +
+        `Acción requerida: usa replace_in_file para modificaciones parciales, ` +
+        `o lee el archivo completo con read_file y asegúrate de incluir TODO el contenido actualizado.`
+      );
     }
   }
 
@@ -238,6 +255,34 @@ export async function deleteFile({ path: filePath }: DeleteFileParams): Promise<
 }
 
 /**
+ * Elimina un directorio y todo su contenido de forma recursiva.
+ */
+export async function deleteDirectory({ path: dirPath }: DeleteDirectoryParams): Promise<ToolResult> {
+  logger.tool("delete_directory", dirPath);
+
+  const resolvedPath = validatePath(dirPath);
+
+  try {
+    const stat = await fs.stat(resolvedPath);
+    if (!stat.isDirectory()) {
+      throw new Error(`"${dirPath}" no es un directorio. Usa delete_file para archivos.`);
+    }
+
+    await fs.rm(resolvedPath, { recursive: true, force: true });
+    logger.success(`delete_directory: "${dirPath}" eliminado`);
+
+    return {
+      content: [{ type: "text", text: `🗑️ Directorio eliminado: ${dirPath}` }],
+    };
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error(`Directorio no encontrado: "${dirPath}"`);
+    }
+    throw err;
+  }
+}
+
+/**
  * Crea un directorio (con padres si es necesario).
  */
 export async function createDirectory({ path: dirPath }: CreateDirectoryParams): Promise<ToolResult> {
@@ -354,6 +399,13 @@ export async function replaceInFile({ path: filePath, old_string, new_string, re
       `El texto a reemplazar no se encontró en "${filePath}".\n` +
       `Texto buscado (primeros 120 chars): ${preview}\n` +
       `Solución: usa read_file para ver el contenido exacto del archivo y copia el texto tal como aparece.`
+    );
+  }
+
+  if (new_string.trim().length === 0 && old_string.trim().length > 50) {
+    throw new Error(
+      `Reemplazo bloqueado en "${filePath}": no se puede reemplazar un bloque de ${old_string.trim().length} chars con contenido vacío.\n` +
+      `Si deseas eliminar código, asegúrate de que new_string contenga el contenido correcto.`
     );
   }
 
@@ -578,5 +630,69 @@ export async function copyFile({ path: filePath, destination }: CopyFileParams):
 
   return {
     content: [{ type: "text", text: `✅ Archivo copiado: ${filePath} → ${destination}\n📏 Tamaño: ${sizeKB} KB` }],
+  };
+}
+
+// ─── Project Notes ────────────────────────────────────────────────────────────
+
+/**
+ * Guarda una nota en el archivo .agent-notes.md del workspace.
+ * Las notas persisten entre sesiones y se inyectan como contexto al agente.
+ */
+export async function saveNote({ content, title }: SaveNoteParams): Promise<ToolResult> {
+  logger.tool("save_note", title ?? "(sin título)");
+
+  const workspaceDir = getWorkspaceDir();
+  const notesPath = path.join(workspaceDir, NOTES_FILENAME);
+  const timestamp = new Date().toLocaleString("es", { dateStyle: "short", timeStyle: "short" });
+  const header = `\n## ${title ?? "Nota"}\n*${timestamp}*\n\n`;
+  const entry = header + content.trim() + "\n\n---\n";
+
+  await fs.appendFile(notesPath, entry, "utf-8");
+
+  logger.success(`save_note: entrada guardada en ${NOTES_FILENAME}`);
+  return {
+    content: [{ type: "text", text: `✅ Nota guardada en ${NOTES_FILENAME}\nTítulo: ${title ?? "Nota"}\nFecha: ${timestamp}` }],
+  };
+}
+
+/**
+ * Lee todas las notas del proyecto desde .agent-notes.md.
+ */
+export async function readNotes(): Promise<ToolResult> {
+  logger.tool("read_notes", NOTES_FILENAME);
+
+  const workspaceDir = getWorkspaceDir();
+  const notesPath = path.join(workspaceDir, NOTES_FILENAME);
+
+  try {
+    const content = await fs.readFile(notesPath, "utf-8");
+    if (!content.trim()) {
+      return { content: [{ type: "text", text: "📭 No hay notas guardadas para este proyecto." }] };
+    }
+    const lines = content.split("\n").length;
+    logger.success(`read_notes: ${lines} líneas`);
+    return {
+      content: [{ type: "text", text: `📝 Notas del proyecto (${NOTES_FILENAME}):\n${"─".repeat(40)}\n${content}` }],
+    };
+  } catch {
+    return { content: [{ type: "text", text: "📭 No hay notas guardadas para este proyecto." }] };
+  }
+}
+
+/**
+ * Elimina todas las notas del proyecto.
+ */
+export async function clearNotes(): Promise<ToolResult> {
+  logger.tool("clear_notes", NOTES_FILENAME);
+
+  const workspaceDir = getWorkspaceDir();
+  const notesPath = path.join(workspaceDir, NOTES_FILENAME);
+
+  await fs.writeFile(notesPath, "", "utf-8");
+  logger.success(`clear_notes: ${NOTES_FILENAME} vaciado`);
+
+  return {
+    content: [{ type: "text", text: `🗑️ Notas del proyecto limpiadas.` }],
   };
 }

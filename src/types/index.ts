@@ -55,14 +55,18 @@ export interface Provider {
   client: OpenAI;
   failures: number;
   openUntil: number;
+  lastErrorCode?: number;
 }
 
 export interface ProviderInfo {
   index: number;
   name: string;
+  model: string;
   active: boolean;
   healthy: boolean;
   failures: number;
+  openUntilMs: number;
+  lastErrorCode?: number;
 }
 
 export interface ProviderSwitchEvent {
@@ -93,6 +97,13 @@ export interface ToolEvent {
   args: Record<string, unknown>;
 }
 
+export interface ConfirmEvent {
+  id: string;
+  toolName: string;
+  args: Record<string, unknown>;
+  resolve: (approved: boolean) => void;
+}
+
 // ─── Error types ──────────────────────────────────────────────────────────────
 
 export interface LLMError extends Error {
@@ -121,6 +132,10 @@ export interface ListDirectoryParams {
 }
 
 export interface DeleteFileParams {
+  path: string;
+}
+
+export interface DeleteDirectoryParams {
   path: string;
 }
 
@@ -262,6 +277,7 @@ export interface WorkspaceBody {
 
 export interface ChatBody {
   message?: string;
+  agent?: "dev" | "test" | "codereview";
 }
 
 export interface GitAddBody {
@@ -275,4 +291,19 @@ export interface GitRestoreBody {
 
 export interface GitCommitBody {
   message?: string;
+}
+
+export interface GitBranchBody {
+  name?: string;
+  from?: string;
+}
+
+export interface SaveNoteParams {
+  content: string;
+  title?: string;
+}
+
+export interface NotesBody {
+  content?: string;
+  title?: string;
 }

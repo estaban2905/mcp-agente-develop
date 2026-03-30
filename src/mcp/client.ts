@@ -130,8 +130,19 @@ export class MCPClient {
     if (this.transport) {
       await this.transport.close();
       this.connected = false;
+      this.client = null;
+      this.transport = null;
       logger.info("MCP Client desconectado.");
     }
+  }
+
+  /**
+   * Reconecta al MCP Server (reinicia el subprocess con el env actualizado).
+   * Necesario para propagar cambios de WORKSPACE_DIR al subprocess.
+   */
+  async reconnect(): Promise<void> {
+    await this.disconnect();
+    await this.connect();
   }
 
   /**

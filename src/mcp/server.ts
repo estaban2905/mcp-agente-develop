@@ -18,9 +18,9 @@ import { z } from "zod";
 import fs from "fs/promises";
 
 import {
-  readFile, writeFile, listDirectory, deleteFile, createDirectory,
+  readFile, writeFile, listDirectory, deleteFile, deleteDirectory, createDirectory,
   applyDiff, searchFiles, readFileRange, appendFile, renameFile, moveFile, copyFile,
-  replaceInFile,
+  replaceInFile, saveNote, readNotes, clearNotes,
 } from "../tools/filesystem.js";
 import { runCommand, runTests } from "../tools/terminal.js";
 import {
@@ -106,6 +106,21 @@ server.tool(
       return await deleteFile(args);
     } catch (err) {
       return { content: [{ type: "text", text: `❌ Error en delete_file: ${(err as Error).message}` }], isError: true };
+    }
+  }
+);
+
+server.tool(
+  "delete_directory",
+  "Elimina un directorio completo y todo su contenido del workspace de forma recursiva. Esta operación es IRREVERSIBLE.",
+  {
+    path: z.string().describe("Ruta relativa del directorio a eliminar (ej: '.git', 'dist', 'node_modules/some-pkg')"),
+  },
+  async (args) => {
+    try {
+      return await deleteDirectory(args);
+    } catch (err) {
+      return { content: [{ type: "text", text: `❌ Error en delete_directory: ${(err as Error).message}` }], isError: true };
     }
   }
 );
@@ -447,6 +462,50 @@ server.tool(
   }
 );
 
+// ─── Registro de Tools: Project Notes ────────────────────────────────────────
+
+server.tool(
+  "save_note",
+  "Guarda una nota persistente en el archivo .agent-notes.md del workspace. Usa esta tool cuando el usuario pida guardar análisis, mejoras pendientes, decisiones o cualquier información importante del proyecto. Las notas se inyectan automáticamente en el contexto del agente en futuras sesiones.",
+  {
+    content: z.string().describe("Contenido de la nota (puede incluir listas, código, análisis, etc.)"),
+    title:   z.string().optional().describe("Título descriptivo de la nota (ej: 'Mejoras pendientes', 'Decisiones de arquitectura')"),
+  },
+  async (args) => {
+    try {
+      return await saveNote(args);
+    } catch (err) {
+      return { content: [{ type: "text", text: `❌ Error en save_note: ${(err as Error).message}` }], isError: true };
+    }
+  }
+);
+
+server.tool(
+  "read_notes",
+  "Lee todas las notas guardadas del proyecto desde .agent-notes.md. Úsala cuando necesites consultar el historial de análisis, mejoras o decisiones registradas.",
+  {},
+  async () => {
+    try {
+      return await readNotes();
+    } catch (err) {
+      return { content: [{ type: "text", text: `❌ Error en read_notes: ${(err as Error).message}` }], isError: true };
+    }
+  }
+);
+
+server.tool(
+  "clear_notes",
+  "Elimina todas las notas guardadas del proyecto. Usar con precaución.",
+  {},
+  async () => {
+    try {
+      return await clearNotes();
+    } catch (err) {
+      return { content: [{ type: "text", text: `❌ Error en clear_notes: ${(err as Error).message}` }], isError: true };
+    }
+  }
+);
+
 // ─── Arranque del Server ──────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -463,6 +522,7 @@ async function main(): Promise<void> {
     "run_command", "run_tests",
     "git_init", "git_status", "git_add", "git_commit", "git_log",
     "git_diff", "git_branch", "git_checkout", "git_restore",
+    "save_note", "read_notes", "clear_notes",
   ].join(", ")}`);
 }
 

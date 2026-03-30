@@ -1,0 +1,156 @@
+.aside {
+  width: var(--aside-width);
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  transform: translateX(0);
+  transition: transform 0.25s ease, width 0.25s ease;
+  overflow: hidden;
+}
+
+.aside.hidden {
+  width: 0;
+  transform: translateX(100%);
+}
+
+.aside-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.aside-header h2 {
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.close-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.close-btn:hover {
+  border-color: var(--text-muted);
+  color: var(--text);
+}
+
+.aside-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.section-title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  padding: 0 4px;
+}
+
+.stats-card {
+  background: var(--tool-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stat-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.stat-label {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.provider-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tools-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.tool-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--text-muted);
+  border-radius: 4px;
+  cursor: default;
+}
+
+.tool-item:hover {
+  background: var(--surface-hover);
+  color: var(--accent);
+}
+
+.tool-icon {
+  width: 16px;
+  text-align: center;
+}
+
+.session-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  background: var(--tool-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 11px;
+}
+
+.session-row {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-muted);
+}
+
+.session-row span:last-child {
+  color: var(--text);
+  font-family: monospace;
+}

@@ -5,9 +5,12 @@
 // =============================================
 
 import { EventEmitter } from "events";
+import fs from "fs/promises";
+import path from "path";
 import { ProviderRegistry } from "../providers/registry.js";
 import { logger } from "../utils/logger.js";
 import { config } from "../config/index.js";
+import { getWorkspaceDir } from "../utils/security.js";
 import type OpenAI from "openai";
 import type {
   ChatMessage,
@@ -16,12 +19,19 @@ import type {
   AgentStats,
   DoneEvent,
   ToolEvent,
+  ConfirmEvent,
   ProviderSwitchEvent,
   LLMError,
 } from "../types/index.js";
 import type { MCPClient } from "../mcp/client.js";
 
 const MAX_TRIM_RETRIES = 3;
+
+const TOOLS_REQUIRING_CONFIRM = new Set([
+  "delete_file",
+  "delete_directory",
+  "git_restore",
+]);
 
 const SYSTEM_PROMPT = `Eres un agente experto en desarrollo de software con acceso completo al workspace mediante herramientas.
 
@@ -145,6 +155,7 @@ export class DevAgent {
   private conversationHistory: ChatMessage[];
   private iterationCount: number;
   private totalToolCalls: number;
+  private projectNotes: string;
   readonly events: EventEmitter;
 
   constructor(mcpClient: MCPClient) {
@@ -153,12 +164,28 @@ export class DevAgent {
     this.conversationHistory = [];
     this.iterationCount      = 0;
     this.totalToolCalls      = 0;
+    this.projectNotes        = "";
     this.events              = new EventEmitter();
+  }
+
+  private async loadProjectNotes(): Promise<string> {
+    try {
+      const notesPath = path.join(getWorkspaceDir(), ".agent-notes.md");
+      const content   = await fs.readFile(notesPath, "utf-8");
+      return content.trim();
+    } catch {
+      return "";
+    }
   }
 
   async processMessage(userMessage: string): Promise<string> {
     logger.divider("NUEVA TAREA");
     logger.agent(`Tarea recibida: ${userMessage}`);
+
+    this.projectNotes = await this.loadProjectNotes();
+    if (this.projectNotes) {
+      logger.info(`Notas del proyecto cargadas (${this.projectNotes.length} chars)`);
+    }
 
     this.conversationHistory.push({ role: "user", content: userMessage });
     this.iterationCount = 0;
@@ -251,13 +278,19 @@ export class DevAgent {
     return this.registry.callWithFallback(async (provider) => {
       logger.debug(`Llamando ${provider.name} con ${this.conversationHistory.length} mensajes`);
 
+      const systemContent = this.projectNotes
+        ? `${SYSTEM_PROMPT}\n\n${"─".repeat(60)}\n## 📝 NOTAS DEL PROYECTO (contexto persistente)\n\nEstas notas fueron guardadas en sesiones anteriores. Tenlas en cuenta:\n\n${this.projectNotes}`
+        : SYSTEM_PROMPT;
+
       const messages = this.sanitizeMessages([
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: systemContent },
         ...this.conversationHistory,
       ]);
 
       // Los modelos o-series (o1, o3, o4-mini, etc.) no aceptan temperature ni parallel_tool_calls
       const isOSeries = /^o\d/i.test(provider.model);
+      // Los modelos Claude (via endpoint OpenAI-compatible de Anthropic) no aceptan parallel_tool_calls
+      const isClaude  = provider.model.startsWith("claude-");
 
       try {
         const response = await provider.client.chat.completions.create({
@@ -265,7 +298,7 @@ export class DevAgent {
           messages: messages as Parameters<typeof provider.client.chat.completions.create>[0]["messages"],
           tools: tools as Parameters<typeof provider.client.chat.completions.create>[0]["tools"],
           tool_choice: "auto",
-          ...(!isOSeries && { parallel_tool_calls: false }),
+          ...(!isOSeries && !isClaude && { parallel_tool_calls: false }),
           ...(!isOSeries && { temperature: 0.1 }),
           ...(isOSeries
             ? { max_completion_tokens: 4096 }
@@ -343,6 +376,19 @@ export class DevAgent {
       const toolEvent: ToolEvent = { name: toolName, args: toolArgs };
       this.events.emit("tool", toolEvent);
 
+      if (TOOLS_REQUIRING_CONFIRM.has(toolName)) {
+        const approved = await this.requestConfirmation(toolName, toolArgs);
+        if (!approved) {
+          logger.warn(`Tool ${toolName} cancelada por el usuario.`);
+          results.push({
+            role: "tool",
+            tool_call_id: toolCall.id,
+            content: "⚠️ Acción cancelada por el usuario. No se realizaron cambios.",
+          });
+          continue;
+        }
+      }
+
       let resultText: string;
       try {
         const result = await this.mcpClient.callTool(toolName, toolArgs);
@@ -367,6 +413,14 @@ export class DevAgent {
     }
 
     return results;
+  }
+
+  private requestConfirmation(toolName: string, args: Record<string, unknown>): Promise<boolean> {
+    return new Promise((resolve) => {
+      const id = Math.random().toString(36).slice(2);
+      const event: ConfirmEvent = { id, toolName, args, resolve };
+      this.events.emit("confirm", event);
+    });
   }
 
   private trimHistory(): void {
@@ -407,5 +461,14 @@ export class DevAgent {
       provider:   current.name,
       providers:  this.registry.list(),
     };
+  }
+
+  async testProvider(index: number): Promise<{ ok: boolean; latencyMs?: number; error?: string; errorCode?: number }> {
+    return this.registry.testProvider(index);
+  }
+
+  /** Recarga los proveedores desde process.env sin reiniciar el servidor. */
+  reloadProviders(): void {
+    this.registry.reload();
   }
 }

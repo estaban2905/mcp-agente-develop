@@ -66,9 +66,16 @@ export function validateCommand(command: string): true {
 
 /**
  * Sanitiza el contenido de un archivo antes de escribirlo.
- * Verifica tamaño máximo.
+ * Verifica tamaño máximo y que el contenido no esté vacío.
  */
 export function validateFileContent(content: string, maxSizeMB = 10): true {
+  if (content === undefined || content === null || content.trim().length === 0) {
+    throw new Error(
+      `El contenido del archivo no puede estar vacío. ` +
+      `Si necesitas limpiar el archivo, usa replace_in_file con el contenido correcto.`
+    );
+  }
+
   const sizeBytes = Buffer.byteLength(content, "utf8");
   const sizeMB = sizeBytes / (1024 * 1024);
 

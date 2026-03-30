@@ -1,0 +1,12 @@
+.app-container {
+  display: flex;
+  flex: 1;
+  height: 100dvh;
+}
+
+.main-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
