@@ -161,6 +161,38 @@ function getAgent(agentType: string | undefined) {
 
 const pendingConfirms = new Map<string, (approved: boolean) => void>();
 
+// ─── Job Store ────────────────────────────────────────────────────────────────
+
+type JobListener = (data: object, idx: number) => void;
+
+interface Job {
+  status: "running" | "done" | "error";
+  events: object[];
+  listeners: Set<JobListener>;
+  createdAt: number;
+}
+
+const jobStore = new Map<string, Job>();
+
+function generateJobId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function emitJobEvent(job: Job, data: object): void {
+  const idx = job.events.length;
+  job.events.push(data);
+  for (const listener of job.listeners) {
+    listener(data, idx);
+  }
+}
+
+function closeJobListeners(job: Job): void {
+  for (const listener of job.listeners) {
+    listener({ type: "_close" }, -1);
+  }
+  job.listeners.clear();
+}
+
 async function initAgent(): Promise<void> {
   await mcpClient.connect();
   devAgent = new DevAgent(mcpClient);
@@ -447,7 +479,7 @@ app.get("/git/log", async (_req: Request, res: Response) => {
 });
 
 app.get("/git/branches", async (_req: Request, res: Response) => {
-  const result = await gitExecPanel("branch --format=%(refname:short)");
+  const result = await gitExecPanel("branch '--format=%(refname:short)'");
   if (!result.ok) return res.json({ ok: false, branches: [] });
   const branches = result.out.split("\n").map(b => b.trim()).filter(Boolean);
   res.json({ ok: true, branches });
@@ -465,6 +497,23 @@ app.post("/git/branch", async (req: Request<object, object, GitBranchBody>, res:
   if (!name?.trim()) return res.status(400).json({ ok: false, out: "Nombre de rama requerido" });
   const base = from?.trim() || "HEAD";
   const result = await gitExecPanel(`checkout -b ${name.trim()} ${base}`);
+  res.json(result);
+});
+
+app.post("/git/branch/rename", async (req: Request<object, object, { oldName?: string; newName?: string }>, res: Response) => {
+  const { oldName, newName } = req.body;
+  if (!oldName?.trim() || !newName?.trim()) return res.status(400).json({ ok: false, out: "Nombres requeridos" });
+  const result = await gitExecPanel(`branch -m ${oldName.trim()} ${newName.trim()}`);
+  res.json(result);
+});
+
+app.post("/git/branch/delete", async (req: Request<object, object, { name?: string; force?: boolean }>, res: Response) => {
+  const { name, force } = req.body;
+  if (!name?.trim()) return res.status(400).json({ ok: false, out: "Nombre de rama requerido" });
+  const PROTECTED = ["master", "main", "develop", "production"];
+  if (PROTECTED.includes(name.trim())) return res.status(400).json({ ok: false, out: `La rama "${name}" está protegida y no se puede eliminar.` });
+  const flag = force ? "-D" : "-d";
+  const result = await gitExecPanel(`branch ${flag} ${name.trim()}`);
   res.json(result);
 });
 
@@ -532,8 +581,8 @@ app.delete("/notes", async (_req: Request, res: Response) => {
  *   data: { type: "done",  content, iterations, toolCalls }
  *   data: { type: "error", message }
  */
-app.post("/chat", async (req: Request<object, object, ChatBody>, res: Response) => {
-  const { message, agent: agentType } = req.body;
+app.post("/chat", (req: Request<object, object, ChatBody>, res: Response) => {
+  const { message, agent: agentType, jobId: clientJobId } = req.body;
   if (!message?.trim()) {
     return res.status(400).json({ error: "message requerido" });
   }
@@ -543,42 +592,117 @@ app.post("/chat", async (req: Request<object, object, ChatBody>, res: Response) 
     return res.status(400).json({ error: "Agente no disponible" });
   }
 
+  // Usar jobId del cliente si es válido y no está en uso
+  const jobId = (clientJobId && typeof clientJobId === "string" && !jobStore.has(clientJobId))
+    ? clientJobId
+    : generateJobId();
+
+  const job: Job = {
+    status: "running",
+    events: [],
+    listeners: new Set(),
+    createdAt: Date.now(),
+  };
+  jobStore.set(jobId, job);
+
+  // Start processing in background
+  (async () => {
+    const onTool    = ({ name, args }: ToolEvent)             => emitJobEvent(job, { type: "tool", name, args });
+    const onDone    = (payload: DoneEvent)                    => {
+      emitJobEvent(job, { type: "done", ...payload });
+      job.status = "done";
+      closeJobListeners(job);
+    };
+    const onSwitch  = ({ from, reason }: ProviderSwitchEvent) => emitJobEvent(job, { type: "providerSwitch", from, reason });
+    const onConfirm = (event: ConfirmEvent) => {
+      pendingConfirms.set(event.id, event.resolve);
+      emitJobEvent(job, { type: "confirm", id: event.id, toolName: event.toolName, args: event.args });
+    };
+
+    currentAgent.events.once("done",         onDone);
+    currentAgent.events.on("tool",           onTool);
+    currentAgent.events.on("providerSwitch", onSwitch);
+    currentAgent.events.on("confirm",        onConfirm);
+
+    try {
+      await currentAgent.processMessage(message);
+    } catch (err) {
+      emitJobEvent(job, { type: "error", message: (err as Error).message });
+      job.status = "error";
+      closeJobListeners(job);
+    } finally {
+      currentAgent.events.off("tool",          onTool);
+      currentAgent.events.off("done",          onDone);
+      currentAgent.events.off("providerSwitch", onSwitch);
+      currentAgent.events.off("confirm",        onConfirm);
+      // Auto-cleanup after 30 minutes
+      setTimeout(() => jobStore.delete(jobId), 30 * 60 * 1000);
+    }
+  })();
+
+  return res.json({ jobId });
+});
+
+app.get("/chat/job/:jobId", (req: Request, res: Response) => {
+  const job = jobStore.get(req.params.jobId as string);
+  if (!job) return res.status(404).json({ error: "Job no encontrado o expirado" });
+  return res.json({ status: job.status, eventCount: job.events.length });
+});
+
+app.get("/chat/stream/:jobId", (req: Request, res: Response) => {
+  const job = jobStore.get(req.params.jobId as string);
+  if (!job) {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+    res.write(`data: ${JSON.stringify({ type: "error", message: "Job no encontrado o expirado" })}\n\n`);
+    res.end();
+    return;
+  }
+
   res.setHeader("Content-Type",  "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection",    "keep-alive");
   res.flushHeaders();
 
-  const send = (data: object) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+  const lastEventId = parseInt(req.headers["last-event-id"] as string || "-1", 10);
+  const startFrom = isNaN(lastEventId) ? 0 : lastEventId + 1;
 
-  const onTool    = ({ name, args }: ToolEvent)              => send({ type: "tool", name, args });
-  const onDone    = (payload: DoneEvent)                     => { send({ type: "done", ...payload }); res.end(); };
-  const onSwitch  = ({ from, reason }: ProviderSwitchEvent)  => send({ type: "providerSwitch", from, reason });
-  const onConfirm = (event: ConfirmEvent) => {
-    pendingConfirms.set(event.id, event.resolve);
-    send({ type: "confirm", id: event.id, toolName: event.toolName, args: event.args });
+  const send = (data: object, idx: number) => {
+    try { res.write(`id: ${idx}\ndata: ${JSON.stringify(data)}\n\n`); } catch { /* ignore */ }
   };
 
-  currentAgent.events.once("done",          onDone);
-  currentAgent.events.on("tool",            onTool);
-  currentAgent.events.on("providerSwitch",  onSwitch);
-  currentAgent.events.on("confirm",         onConfirm);
-
-  try {
-    await currentAgent.processMessage(message);
-  } catch (err) {
-    try {
-      send({ type: "error", message: (err as Error).message });
-    } catch { /* ignorar si la conexión ya se cerró */ }
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    res.end();
-  } finally {
-    currentAgent.events.off("tool",           onTool);
-    currentAgent.events.off("done",           onDone);
-    currentAgent.events.off("providerSwitch", onSwitch);
-    currentAgent.events.off("confirm",        onConfirm);
+  // Replay missed/buffered events
+  for (let i = startFrom; i < job.events.length; i++) {
+    send(job.events[i], i);
   }
 
-  return;
+  if (job.status !== "running") {
+    res.end();
+    return;
+  }
+
+  const keepalive = setInterval(() => {
+    try { res.write(": ping\n\n"); } catch { clearInterval(keepalive); }
+  }, 15000);
+
+  const listener: JobListener = (data, idx) => {
+    if ((data as { type: string }).type === "_close") {
+      clearInterval(keepalive);
+      job.listeners.delete(listener);
+      res.end();
+    } else {
+      send(data, idx);
+    }
+  };
+
+  job.listeners.add(listener);
+
+  req.on("close", () => {
+    clearInterval(keepalive);
+    job.listeners.delete(listener);
+  });
 });
 
 app.post("/chat/confirm", (req: Request<object, object, { id: string; approved: boolean }>, res: Response) => {

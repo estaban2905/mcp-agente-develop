@@ -278,6 +278,7 @@ export interface WorkspaceBody {
 export interface ChatBody {
   message?: string;
   agent?: "dev" | "test" | "codereview";
+  jobId?: string;
 }
 
 export interface GitAddBody {

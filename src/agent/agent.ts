@@ -230,13 +230,20 @@ export class DevAgent {
       this.conversationHistory.push(message);
 
       if (!message.tool_calls || message.tool_calls.length === 0) {
+        if (!message.content || message.content.trim() === "") {
+          logger.warn("El modelo terminó sin contenido — solicitando resumen explícito.");
+          this.conversationHistory.push({
+            role: "user",
+            content: "Por favor, proporciona una respuesta completa con los resultados de tu análisis o los cambios realizados.",
+          });
+          continue;
+        }
         logger.divider("RESPUESTA FINAL");
-        logger.agent(message.content ?? "(sin contenido)");
+        logger.agent(message.content);
         logger.info(`✅ Completado en ${this.iterationCount} iteraciones, ${this.totalToolCalls} tool calls.`);
-        const final = message.content ?? "Tarea completada.";
-        const doneEvent: DoneEvent = { content: final, iterations: this.iterationCount, toolCalls: this.totalToolCalls };
+        const doneEvent: DoneEvent = { content: message.content, iterations: this.iterationCount, toolCalls: this.totalToolCalls };
         this.events.emit("done", doneEvent);
-        return final;
+        return message.content;
       }
 
       const toolResults = await this.executeToolCalls(message.tool_calls);

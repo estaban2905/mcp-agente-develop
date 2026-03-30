@@ -272,23 +272,47 @@
       border-radius: 2px 12px 12px 12px;
     }
 
+    /* Tool group — agrupa todas las tool-calls en una fila colapsable */
+    .tool-group {
+      align-self: flex-start;
+      margin-left: 48px;
+      max-width: 660px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      font-size: 12px;
+      transition: border-color 0.15s;
+    }
+    .tool-group:hover { border-color: var(--border-light); }
+    .tool-group-summary {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 12px;
+      background: var(--tool-bg);
+      cursor: pointer;
+      user-select: none;
+    }
+    .tg-icon { font-size: 13px; }
+    .tg-label { flex: 1; color: var(--text-muted); }
+    .tg-expand { font-size: 10px; color: var(--text-dim); transition: transform 0.15s; }
+    .tool-group.expanded .tg-expand { transform: rotate(90deg); }
+    .tool-group-detail { display: none; border-top: 1px solid var(--border); animation: fadeIn 0.15s ease; }
+    .tool-group.expanded .tool-group-detail { display: block; }
+
     /* Tool calls */
     .tool-call {
       display: flex;
       flex-direction: column;
       gap: 0;
       background: var(--tool-bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
+      border-bottom: 1px solid var(--border);
       font-size: 12px;
-      align-self: flex-start;
-      max-width: 660px;
-      margin-left: 48px;
-      overflow: hidden;
       cursor: pointer;
-      transition: border-color 0.15s;
+      transition: background 0.1s;
     }
-    .tool-call:hover { border-color: var(--border-light); }
+    .tool-call:last-child { border-bottom: none; }
+    .tool-call:hover { background: rgba(255,255,255,0.02); }
     .tool-call-header {
       display: flex;
       align-items: center;
@@ -361,55 +385,39 @@
     .tool-status.running { background: var(--yellow-dim); color: var(--yellow); animation: pulse 1s infinite; }
     .tool-status.error { background: var(--red-dim); color: var(--red); }
 
-    /* Provider switch indicator */
+    /* Provider switch — pill compacto */
     .provider-switch {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      padding: 8px 12px;
-      background: rgba(210,153,34,0.08);
-      border: 1px solid rgba(210,153,34,0.25);
-      border-left: 3px solid var(--yellow);
-      border-radius: 6px;
-      font-size: 12px;
-      align-self: flex-start;
-      margin-left: 48px;
-      max-width: 500px;
-    }
-    .provider-switch-row {
-      display: flex;
+      display: inline-flex;
       align-items: center;
       gap: 6px;
+      padding: 3px 10px;
+      background: rgba(210,153,34,0.1);
+      border: 1px solid rgba(210,153,34,0.25);
+      border-radius: 20px;
+      font-size: 11px;
+      align-self: flex-start;
+      margin-left: 48px;
     }
-    .provider-switch .ps-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+    .provider-switch .ps-label { color: var(--text-dim); }
     .provider-switch .ps-from { color: var(--text-muted); font-family: monospace; text-decoration: line-through; }
-    .provider-switch .ps-arrow { color: var(--yellow); font-size: 14px; }
+    .provider-switch .ps-arrow { color: var(--yellow); }
     .provider-switch .ps-to { color: var(--yellow); font-weight: 600; font-family: monospace; }
-    .provider-switch .ps-reason { color: var(--text-dim); font-size: 11px; font-style: italic; }
 
-    /* Thinking indicator */
-    .thinking-bubble {
-      background: var(--surface) !important;
-      border-color: rgba(88,166,255,0.2) !important;
-      box-shadow: 0 0 16px rgba(88,166,255,0.06);
-      padding: 10px 16px !important;
-    }
-    .thinking-indicator {
+    /* Thinking indicator — compact inline, no bubble/avatar */
+    .thinking-inline {
       display: flex;
       align-items: center;
-      gap: 12px;
-    }
-    .thinking-label {
+      gap: 8px;
+      padding: 4px 4px 4px 48px;
       font-size: 12px;
-      color: var(--text-muted);
+      color: var(--text-dim);
       font-style: italic;
-      letter-spacing: 0.2px;
     }
     .thinking-wave {
       display: flex;
       align-items: center;
       gap: 3px;
-      height: 18px;
+      height: 14px;
     }
     .thinking-wave span {
       width: 3px;
@@ -418,36 +426,22 @@
       animation: wave 1.1s ease-in-out infinite;
       transform-origin: center;
     }
-    .thinking-wave span:nth-child(1) { height: 14px; animation-delay: 0s; }
-    .thinking-wave span:nth-child(2) { height: 18px; animation-delay: 0.1s; }
-    .thinking-wave span:nth-child(3) { height: 12px; animation-delay: 0.2s; }
-    .thinking-wave span:nth-child(4) { height: 16px; animation-delay: 0.3s; }
-    .thinking-wave span:nth-child(5) { height: 10px; animation-delay: 0.4s; }
+    .thinking-wave span:nth-child(1) { height: 10px; animation-delay: 0s; }
+    .thinking-wave span:nth-child(2) { height: 14px; animation-delay: 0.1s; }
+    .thinking-wave span:nth-child(3) { height: 8px;  animation-delay: 0.2s; }
+    .thinking-wave span:nth-child(4) { height: 12px; animation-delay: 0.3s; }
+    .thinking-wave span:nth-child(5) { height: 6px;  animation-delay: 0.4s; }
     @keyframes wave {
       0%, 100% { transform: scaleY(0.35); opacity: 0.35; }
       50% { transform: scaleY(1); opacity: 1; }
     }
 
-    /* Done meta */
-    .done-meta {
-      display: flex;
-      gap: 8px;
-      font-size: 11px;
+    /* Done meta — ahora se inyecta en el .msg-meta del último mensaje */
+    .done-meta-inline {
       color: var(--green);
-      padding: 5px 12px;
-      background: var(--green-dim);
-      border: 1px solid rgba(63,185,80,0.2);
-      border-radius: 6px;
-      align-self: flex-start;
-      margin-left: 48px;
-      margin-top: 4px;
+      font-size: 11px;
+      opacity: 0.8;
     }
-    .done-meta span {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-    .done-meta .dm-sep { color: rgba(63,185,80,0.3); }
 
     /* ── Input ── */
     footer {
@@ -992,24 +986,90 @@
     .git-info-bar {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
       font-size: 12px;
       color: var(--text-muted);
-      padding: 6px 10px;
+      padding: 5px 8px;
       background: var(--tool-bg);
       border-radius: 6px;
       border: 1px solid var(--border);
     }
-    .git-info-bar .refresh-btn {
-      margin-left: auto;
+    .git-info-project {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 88px;
+      flex-shrink: 0;
+    }
+    .git-branch-select {
+      flex: 1;
+      min-width: 0;
       background: transparent;
-      border: none;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 1px 2px;
+      cursor: pointer;
+      outline: none;
+      transition: border-color .15s, background .15s;
+    }
+    .git-branch-select:hover { border-color: var(--border); background: var(--bg); }
+    .git-branch-select:focus { border-color: var(--accent); background: var(--bg); }
+    .git-icon-btn {
+      flex-shrink: 0;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 4px;
       color: var(--text-muted);
       cursor: pointer;
-      font-size: 14px;
-      padding: 0 2px;
+      font-size: 13px;
+      padding: 1px 4px;
+      line-height: 1.4;
+      transition: color .15s, border-color .15s, background .15s;
     }
-    .git-info-bar .refresh-btn:hover { color: var(--text); }
+    .git-icon-btn:hover { color: var(--text); border-color: var(--border); background: rgba(255,255,255,.05); }
+    .git-icon-btn.active { color: var(--accent); border-color: var(--accent-dim); background: var(--accent-dim); }
+    .git-new-branch-form {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      padding: 8px 10px;
+      background: var(--tool-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      animation: gitSlideDown .15s ease;
+    }
+    @keyframes gitSlideDown {
+      from { opacity: 0; transform: translateY(-4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .git-input {
+      width: 100%;
+      box-sizing: border-box;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 5px 8px;
+      color: var(--text);
+      font-size: 12px;
+      font-family: inherit;
+    }
+    .git-input:focus { outline: none; border-color: var(--accent); }
+    .git-create-btn {
+      background: var(--accent);
+      color: #000;
+      border: none;
+      border-radius: 4px;
+      padding: 5px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .git-create-btn:hover { opacity: .85; }
 
     .git-section { display: flex; flex-direction: column; gap: 2px; }
     .git-section-title {
@@ -1625,12 +1685,25 @@
 </div>
 
 <script>
+  // Log inmediato al cargar la página — muestra el estado de localStorage
+  console.log("[init] página cargada. localStorage mcp-pending-job =", localStorage.getItem("mcp-pending-job"));
+
+  // Log justo antes de que la página se descargue
+  window.addEventListener("beforeunload", () => {
+    console.log("[beforeunload] localStorage mcp-pending-job =", localStorage.getItem("mcp-pending-job"));
+  });
+
   const chat = document.getElementById("chat");
   const input = document.getElementById("input");
   const sendBtn = document.getElementById("send-btn");
   const statusDot = document.getElementById("status-dot");
   const asideEl = document.getElementById("aside");
   let busy = false;
+  const PENDING_JOB_KEY = "mcp-pending-job";
+
+  function generateJobId() {
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  }
   let currentModel = "";
   let currentProvider = "";
   let selectedAgent = "dev";
@@ -1749,10 +1822,40 @@
   sessionStart = new Date();
   document.getElementById("session-start").textContent = formatTime(sessionStart);
 
+  async function reconnectPendingJob() {
+    const jobId = localStorage.getItem(PENDING_JOB_KEY);
+    console.log("[reconnect] jobId en localStorage:", jobId);
+    if (!jobId) return false;
+    try {
+      const probe = await fetch(`/chat/job/${jobId}`).then(r => r.json()).catch(() => null);
+      console.log("[reconnect] probe:", probe);
+      if (!probe || probe.error) {
+        localStorage.removeItem(PENDING_JOB_KEY);
+        return false;
+      }
+      setBusy(true);
+      if (probe.status === "running") {
+        addMessage("agent", `<span style="color:var(--text-muted)">🔄 Reconectando con el agente en curso...</span>`);
+      } else {
+        addMessage("agent", `<span style="color:var(--text-muted)">🔄 Cargando respuesta...</span>`);
+      }
+      addTyping();
+      console.log("[reconnect] conectando a stream:", jobId);
+      await listenToJob(jobId);
+      console.log("[reconnect] stream terminado");
+      return true;
+    } catch (e) {
+      console.error("[reconnect] error:", e);
+      localStorage.removeItem(PENDING_JOB_KEY);
+      return false;
+    }
+  }
+
   // Initialize async
   (async () => {
     await loadChatHistory();
-    if (!chatLoaded) {
+    const reconnected = await reconnectPendingJob();
+    if (!reconnected && !chatLoaded) {
       addMessage("agent", "¡Hola! Soy tu agente de desarrollo. Describe la tarea que quieres realizar y me pondré a trabajar.", { model: currentModel });
     }
   })();
@@ -2245,62 +2348,146 @@
   }
 
   function addProviderSwitch(from, reason) {
-    // Parse reason: may be "error de red", "rate limit", provider name, etc.
-    const isError = /error|fail|timeout/i.test(reason);
-    const isLimit = /rate|limit|quota/i.test(reason);
-    const icon = isError ? "🔴" : isLimit ? "🟡" : "🔄";
-
     const div = document.createElement("div");
     div.className = "provider-switch";
-    div.innerHTML = `
-      <div class="provider-switch-row">
-        <span>${icon}</span>
-        <span class="ps-label">Cambio de proveedor</span>
-      </div>
-      <div class="provider-switch-row">
-        <span class="ps-from">${escHtml(from)}</span>
-        <span class="ps-arrow">→</span>
-        <span class="ps-to">${escHtml(reason)}</span>
-      </div>`;
+    div.innerHTML = `<span>🔄</span><span class="ps-label">Cambio:</span><span class="ps-from">${escHtml(from)}</span><span class="ps-arrow">→</span><span class="ps-to">${escHtml(reason)}</span>`;
     chat.appendChild(div);
     scrollBottom();
     return div;
   }
 
   function addDoneMeta(iterations, toolCalls) {
+    const agentMsgs = chat.querySelectorAll(".msg.agent");
+    const lastAgent = agentMsgs[agentMsgs.length - 1];
+    if (!lastAgent) return;
+    const meta = lastAgent.querySelector(".msg-meta");
+    if (!meta) return;
+
+    const info = document.createElement("span");
+    info.className = "done-meta-inline";
+    info.textContent = `· ✅ ${iterations} iter · 🔧 ${toolCalls} tools`;
+    meta.appendChild(info);
+
+    const btn = document.createElement("button");
+    btn.className = "save-note-btn";
+    btn.title = "Guardar respuesta como nota del proyecto";
+    btn.textContent = "📝 Guardar";
+    btn.addEventListener("click", () => saveLastResponseAsNote(btn));
+    meta.appendChild(btn);
+  }
+
+  function addTyping() {
     const div = document.createElement("div");
-    div.className = "done-meta";
-    div.innerHTML = `
-      <span>✅ Completado</span>
-      <span class="dm-sep">·</span>
-      <span>⟳ ${iterations} iter.</span>
-      <span class="dm-sep">·</span>
-      <span>🔧 ${toolCalls} tools</span>
-      <span class="dm-sep">·</span>
-      <button class="save-note-btn" onclick="saveLastResponseAsNote(this)" title="Guardar respuesta como nota del proyecto">📝 Guardar nota</button>`;
+    div.className = "thinking-inline";
+    div.id = "typing";
+    div.innerHTML = `<div class="thinking-wave"><span></span><span></span><span></span><span></span><span></span></div><span>Pensando...</span>`;
     chat.appendChild(div);
     scrollBottom();
     return div;
   }
 
-  function addTyping() {
-    const div = document.createElement("div");
-    div.className = "msg agent";
-    div.id = "typing";
-    div.innerHTML = `<div class="msg-avatar">🤖</div>
-      <div class="msg-content">
-        <div class="bubble thinking-bubble">
-          <div class="thinking-indicator">
-            <div class="thinking-wave">
-              <span></span><span></span><span></span><span></span><span></span>
+  // ── Job stream listener ───────────────────────────────────────────────────────
+  function listenToJob(jobId) {
+    return new Promise((resolve) => {
+      const evtSource = new EventSource(`/chat/stream/${jobId}`);
+      let toolGroupEl = null;
+      let toolGroupDetail = null;
+      let toolGroupLabel = null;
+      let toolCount = 0;
+
+      function finish(reason, clearStorage = false) {
+        console.log("[finish] llamado por:", reason, "clearStorage:", clearStorage);
+        evtSource.close();
+        if (clearStorage) localStorage.removeItem(PENDING_JOB_KEY);
+        document.getElementById("typing")?.remove();
+        setBusy(false);
+        input.focus();
+        resolve();
+      }
+
+      evtSource.onmessage = async (e) => {
+        const event = JSON.parse(e.data);
+        console.log("[stream] evento recibido:", event.type, event);
+
+        if (event.type === "tool") {
+          document.getElementById("typing")?.remove();
+
+          if (!toolGroupEl) {
+            toolGroupEl = document.createElement("div");
+            toolGroupEl.className = "tool-group";
+            toolGroupEl.innerHTML = `
+              <div class="tool-group-summary">
+                <span class="tg-icon">⚙️</span>
+                <span class="tg-label"></span>
+                <span class="tg-expand">▶</span>
+              </div>
+              <div class="tool-group-detail"></div>`;
+            toolGroupEl.querySelector(".tool-group-summary").addEventListener("click", () => toolGroupEl.classList.toggle("expanded"));
+            chat.appendChild(toolGroupEl);
+            toolGroupDetail = toolGroupEl.querySelector(".tool-group-detail");
+            toolGroupLabel = toolGroupEl.querySelector(".tg-label");
+          }
+
+          toolCount++;
+          toolGroupLabel.textContent = `${toolCount} herramienta${toolCount !== 1 ? "s" : ""} ejecutada${toolCount !== 1 ? "s" : ""}`;
+
+          const icon = TOOL_ICONS[event.name] || "⚙️";
+          const argsFormatted = JSON.stringify(event.args, null, 2);
+          const previewPairs = Object.entries(event.args || {}).slice(0, 2).map(([k, v]) => `${k}: ${String(v).slice(0, 40)}`).join(", ");
+          const tc = document.createElement("div");
+          tc.className = "tool-call";
+          tc.innerHTML = `
+            <div class="tool-call-header">
+              <div class="tool-icon">${icon}</div>
+              <div class="tool-info">
+                <span class="tool-name">${escHtml(event.name)}</span>
+                <span class="tool-args-preview">${escHtml(previewPairs)}</span>
+              </div>
+              <span class="tool-status done">hecho</span>
+              <span class="tool-expand-icon">▶</span>
             </div>
-            <span class="thinking-label">Pensando...</span>
-          </div>
-        </div>
-      </div>`;
-    chat.appendChild(div);
-    scrollBottom();
-    return div;
+            <div class="tool-args-body">${escHtml(argsFormatted)}</div>`;
+          tc.addEventListener("click", ev => { ev.stopPropagation(); tc.classList.toggle("expanded"); });
+          toolGroupDetail.appendChild(tc);
+
+          addTyping();
+          scrollBottom();
+
+        } else if (event.type === "providerSwitch") {
+          document.getElementById("typing")?.remove();
+          addProviderSwitch(event.from, event.reason);
+          addTyping();
+          await updateModelBadge();
+
+        } else if (event.type === "done") {
+          document.getElementById("typing")?.remove();
+          addMessage("agent", renderMarkdown(event.content), { model: currentModel });
+          addDoneMeta(event.iterations, event.toolCalls);
+          refreshStats();
+          finish("done", true);  // solo aquí borramos localStorage
+
+        } else if (event.type === "confirm") {
+          document.getElementById("typing")?.remove();
+          const approved = await showConfirmDialog(event.id, event.toolName, event.args);
+          if (approved) addTyping();
+
+        } else if (event.type === "error") {
+          document.getElementById("typing")?.remove();
+          addMessage("agent", `<span style="color:var(--red)">❌ ${escHtml(event.message)}</span>`);
+          finish("error", true);  // solo aquí borramos localStorage
+        }
+      };
+
+      evtSource.onerror = (e) => {
+        console.warn("[stream] EventSource error, readyState:", evtSource.readyState, e);
+        if (evtSource.readyState === EventSource.CLOSED) {
+          // NO borramos localStorage — puede ser un cierre por reload del browser
+          // En el próximo load, reconnectPendingJob intentará reconectar
+          finish("onerror-CLOSED", false);
+        }
+        // Si es CONNECTING, EventSource reconecta solo — no hacer nada
+      };
+    });
   }
 
   // ── Send message ─────────────────────────────────────────────────────────────
@@ -2313,66 +2500,30 @@
     setBusy(true);
 
     addMessage("user", escHtml(text));
-    const typing = addTyping();
+    addTyping();
 
-    // Update model before starting
+    // Guardar jobId ANTES de cualquier await para que sobreviva un reload
+    const jobId = generateJobId();
+    localStorage.setItem(PENDING_JOB_KEY, jobId);
+    console.log("[chat] jobId generado y guardado:", jobId);
+
     await updateModelBadge();
 
     try {
       const res = await fetch("/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, agent: selectedAgent }),
+        body: JSON.stringify({ message: text, agent: selectedAgent, jobId }),
       });
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        const lines = buffer.split("\n");
-        buffer = lines.pop();
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const event = JSON.parse(line.slice(6));
-
-          if (event.type === "tool") {
-            typing.remove();
-            addToolCall(event.name, event.args, "hecho");
-            addTyping();
-
-          } else if (event.type === "providerSwitch") {
-            typing.remove();
-            addProviderSwitch(event.from, event.reason);
-            addTyping();
-            await updateModelBadge();
-
-          } else if (event.type === "done") {
-            typing.remove();
-            addMessage("agent", renderMarkdown(event.content), { model: currentModel });
-            addDoneMeta(event.iterations, event.toolCalls);
-            refreshStats();
-
-          } else if (event.type === "confirm") {
-            typing.remove();
-            const approved = await showConfirmDialog(event.id, event.toolName, event.args);
-            if (approved) addTyping();
-
-          } else if (event.type === "error") {
-            typing.remove();
-            addMessage("agent", `<span style="color:var(--red)">❌ ${escHtml(event.message)}</span>`);
-          }
-        }
-      }
+      const data = await res.json();
+      console.log("[chat] POST /chat response:", data);
+      if (data.error) throw new Error(data.error);
+      await listenToJob(jobId);
     } catch (err) {
+      console.error("[chat] Error en sendMessage:", err);
+      localStorage.removeItem(PENDING_JOB_KEY);  // error real del servidor, limpiar
       document.getElementById("typing")?.remove();
       addMessage("agent", `<span style="color:var(--red)">❌ Error de conexión: ${escHtml(err.message)}</span>`);
-    } finally {
       setBusy(false);
       input.focus();
     }
@@ -2424,9 +2575,10 @@
 
   async function loadGitPanel() {
     gitBodyEl.innerHTML = '<div class="git-empty" style="text-align:center;padding:20px">Cargando...</div>';
-    const [info, log] = await Promise.all([
+    const [info, log, branchesData] = await Promise.all([
       fetch("/git/info").then(r => r.json()).catch(() => null),
       fetch("/git/log").then(r => r.json()).catch(() => []),
+      fetch("/git/branches").then(r => r.json()).catch(() => ({ branches: [] })),
     ]);
     if (!info || info.error) {
       const errMsg = info?.error || "Error al cargar git info";
@@ -2455,7 +2607,7 @@
       return;
     }
     try {
-      renderGitPanel(info, log);
+      renderGitPanel(info, log, branchesData.branches || []);
     } catch (err) {
       gitBodyEl.innerHTML = `<div class="git-empty" style="text-align:center;padding:20px">⚠️ Error al renderizar: ${escHtml(err.message)}</div>`;
     }
@@ -2468,22 +2620,78 @@
     return `<span class="sbadge ${cls}">${escHtml(STATUS_LABELS[s] || s)}</span>`;
   }
 
-  function renderGitPanel(info, log) {
+  function renderGitPanel(info, log, branches) {
     let h = "";
 
+    // Info bar: proyecto + branch select funcional + botones
+    const branchOpts = branches.length
+      ? branches.map(b => `<option value="${escAttr(b)}" ${b === info.branch ? "selected" : ""}>${escHtml(b)}</option>`).join("")
+      : `<option value="${escAttr(info.branch)}">${escHtml(info.branch)}</option>`;
+
     h += `<div class="git-info-bar">
-      <span>📁 <strong>${escHtml(info.project)}</strong></span>
-      <span>·</span>
-      <span>🌿 ${escHtml(info.branch)}</span>
-      <button class="refresh-btn" onclick="loadGitPanel()" title="Actualizar">↺</button>
+      <span class="git-info-project">📁 <strong>${escHtml(info.project)}</strong></span>
+      <span style="color:var(--border-light);flex-shrink:0">·</span>
+      <span style="flex-shrink:0">🌿</span>
+      <select class="git-branch-select" onchange="doCheckoutInline(this.value)" title="Cambiar rama">
+        ${branchOpts}
+      </select>
+      <button class="git-icon-btn" id="new-branch-toggle" onclick="toggleGitForm('new')" title="Nueva rama">＋</button>
+      <button class="git-icon-btn" id="rename-branch-toggle" onclick="toggleGitForm('rename')" title="Renombrar rama">✏️</button>
+      <button class="git-icon-btn" id="delete-branch-toggle" onclick="toggleGitForm('delete')" title="Eliminar rama">🗑</button>
+      <button class="git-icon-btn" onclick="loadGitPanel()" title="Actualizar">↺</button>
     </div>`;
 
-    h += `<div class="git-section">
-      <div class="git-section-title">
-        <span>Staged <span style="color:var(--green)">(${info.staged.length})</span></span>
-        ${info.staged.length ? `<button class="fbn y" data-bulk="unstage-all">Unstage all</button>` : ""}
-      </div>`;
+    // Forms colapsables (nueva rama / renombrar / eliminar)
+    const baseOpts = `<option value="">HEAD (actual)</option>` +
+      branches.map(b => `<option value="${escAttr(b)}">${escHtml(b)}</option>`).join("");
+
+    const PROTECTED_BRANCHES = ["master", "main", "develop", "production"];
+    const otherBranches = branches.filter(b => b !== info.branch && !PROTECTED_BRANCHES.includes(b));
+    const deleteOpts = otherBranches.length
+      ? otherBranches.map(b => `<option value="${escAttr(b)}">${escHtml(b)}</option>`).join("")
+      : `<option value="" disabled>No hay otras ramas</option>`;
+
+    h += `<div class="git-new-branch-form" id="git-new-branch-form" style="display:none">
+      <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Nueva rama</div>
+      <input id="branch-name" class="git-input" placeholder="Nombre de la nueva rama..." onkeydown="if(event.key==='Enter')doCreateBranch()">
+      <div style="display:flex;gap:6px;align-items:center">
+        <select id="branch-from" class="git-branch-select" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-size:12px">
+          ${baseOpts}
+        </select>
+        <button class="git-create-btn" id="branch-btn" onclick="doCreateBranch()">Crear</button>
+      </div>
+    </div>
+
+    <div class="git-new-branch-form" id="git-rename-branch-form" style="display:none">
+      <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Renombrar rama</div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <select id="rename-branch-from" class="git-branch-select" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-size:12px">
+          ${branches.map(b => `<option value="${escAttr(b)}" ${b === info.branch ? "selected" : ""}>${escHtml(b)}</option>`).join("")}
+        </select>
+        <span style="color:var(--text-muted);flex-shrink:0">→</span>
+        <input id="rename-branch-to" class="git-input" style="flex:1;margin:0" placeholder="Nuevo nombre..." onkeydown="if(event.key==='Enter')doRenameBranch()">
+        <button class="git-create-btn" id="rename-btn" onclick="doRenameBranch()">OK</button>
+      </div>
+    </div>
+
+    <div class="git-new-branch-form" id="git-delete-branch-form" style="display:none">
+      <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Eliminar rama</div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <select id="delete-branch-target" class="git-branch-select" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-size:12px">
+          ${deleteOpts}
+        </select>
+        <button class="git-create-btn" id="delete-btn" onclick="doDeleteBranch()" style="background:var(--red)">Eliminar</button>
+      </div>
+      <div style="font-size:10px;color:var(--text-muted)">No se puede eliminar la rama activa (${escHtml(info.branch)})</div>
+    </div>`;
+
+    // Staged — solo si hay archivos
     if (info.staged.length) {
+      h += `<div class="git-section">
+        <div class="git-section-title">
+          <span>Staged <span style="color:var(--green)">(${info.staged.length})</span></span>
+          <button class="fbn y" data-bulk="unstage-all">Unstage all</button>
+        </div>`;
       for (const f of info.staged) {
         h += `<div class="git-file">
           ${sbadge(f.status)}
@@ -2491,17 +2699,16 @@
           <button class="fbn y" data-action="unstage" data-file="${escAttr(f.file)}" title="Unstage">↓</button>
         </div>`;
       }
-    } else {
-      h += `<div class="git-empty">Sin cambios staged</div>`;
+      h += `</div>`;
     }
-    h += `</div><hr class="git-divider">`;
 
-    h += `<div class="git-section">
-      <div class="git-section-title">
-        <span>Cambios <span style="color:var(--yellow)">(${info.unstaged.length})</span></span>
-        ${info.unstaged.length ? `<button class="fbn g" data-bulk="stage-all">Add all</button>` : ""}
-      </div>`;
+    // Cambios sin stagear — solo si hay archivos
     if (info.unstaged.length) {
+      h += `<div class="git-section">
+        <div class="git-section-title">
+          <span>Cambios <span style="color:var(--yellow)">(${info.unstaged.length})</span></span>
+          <button class="fbn g" data-bulk="stage-all">Add all</button>
+        </div>`;
       for (const f of info.unstaged) {
         h += `<div class="git-file">
           ${sbadge(f.status)}
@@ -2510,17 +2717,16 @@
           <button class="fbn r" data-action="restore" data-file="${escAttr(f.file)}" title="Restaurar">⟳</button>
         </div>`;
       }
-    } else {
-      h += `<div class="git-empty">Sin cambios</div>`;
+      h += `</div>`;
     }
-    h += `</div><hr class="git-divider">`;
 
-    h += `<div class="git-section">
-      <div class="git-section-title">
-        <span>Sin seguimiento <span style="color:var(--text-muted)">(${info.untracked.length})</span></span>
-        ${info.untracked.length ? `<button class="fbn g" data-bulk="add-untracked">Add all</button>` : ""}
-      </div>`;
+    // Sin seguimiento — solo si hay archivos
     if (info.untracked.length) {
+      h += `<div class="git-section">
+        <div class="git-section-title">
+          <span>Sin seguimiento <span style="color:var(--text-muted)">(${info.untracked.length})</span></span>
+          <button class="fbn g" data-bulk="add-untracked">Add all</button>
+        </div>`;
       for (const f of info.untracked) {
         h += `<div class="git-file">
           <span class="sbadge sbadge-q">?</span>
@@ -2529,11 +2735,17 @@
           <button class="fbn r" data-action="remove" data-file="${escAttr(f.file)}" title="Eliminar archivo">🗑</button>
         </div>`;
       }
-    } else {
-      h += `<div class="git-empty">Sin archivos nuevos</div>`;
+      h += `</div>`;
     }
-    h += `</div><hr class="git-divider">`;
 
+    // Estado limpio
+    if (!info.staged.length && !info.unstaged.length && !info.untracked.length) {
+      h += `<div style="font-size:12px;color:var(--green);padding:6px 8px;text-align:center;opacity:.8">✓ Working tree limpio</div>`;
+    }
+
+    h += `<hr class="git-divider">`;
+
+    // Commit
     h += `<div class="commit-area">
       <div class="git-section-title"><span>Commit</span></div>
       <textarea id="commit-msg" placeholder="Mensaje del commit..."></textarea>
@@ -2541,23 +2753,11 @@
         ${info.staged.length === 0 ? "disabled" : ""}>
         Commit staged (${info.staged.length})
       </button>
-    </div><hr class="git-divider">`;
+    </div>`;
 
-    h += `<div class="commit-area">
-      <div class="git-section-title"><span>Cambiar rama</span></div>
-      <select id="checkout-branch" style="width:100%;box-sizing:border-box;background:var(--bg-input,#1e1e2e);border:1px solid var(--border);border-radius:4px;padding:6px 8px;color:var(--text);font-size:12px;margin-bottom:4px">
-        <option value="">Cargando ramas...</option>
-      </select>
-      <button class="commit-btn" id="checkout-btn" onclick="doCheckout()">Cambiar rama</button>
-    </div><hr class="git-divider">`;
+    h += `<hr class="git-divider">`;
 
-    h += `<div class="commit-area">
-      <div class="git-section-title"><span>Crear rama</span></div>
-      <input id="branch-name" placeholder="Nombre de la rama..." style="width:100%;box-sizing:border-box;background:var(--bg-input,#1e1e2e);border:1px solid var(--border);border-radius:4px;padding:6px 8px;color:var(--text);font-size:12px;margin-bottom:4px">
-      <input id="branch-from" placeholder="Desde (rama/commit, vacío = HEAD)..." style="width:100%;box-sizing:border-box;background:var(--bg-input,#1e1e2e);border:1px solid var(--border);border-radius:4px;padding:6px 8px;color:var(--text);font-size:12px;margin-bottom:4px">
-      <button class="commit-btn" id="branch-btn" onclick="doCreateBranch()">Crear rama</button>
-    </div><hr class="git-divider">`;
-
+    // Historial
     h += `<div class="git-section">
       <div class="git-section-title"><span>Historial reciente</span></div>`;
     if (log && log.length) {
@@ -2574,15 +2774,6 @@
     h += `</div>`;
 
     gitBodyEl.innerHTML = h;
-
-    // Poblar select de ramas
-    fetch("/git/branches").then(r => r.json()).then(data => {
-      const sel = document.getElementById("checkout-branch");
-      if (!sel || !data.branches) return;
-      sel.innerHTML = data.branches.map(b =>
-        `<option value="${escAttr(b)}" ${b === info.branch ? "selected" : ""}>${escHtml(b)}</option>`
-      ).join("") || `<option value="">Sin ramas</option>`;
-    }).catch(() => {});
   }
 
   gitBodyEl.addEventListener("click", async (e) => {
@@ -2823,13 +3014,39 @@
     }
   }
 
-  async function doCheckout() {
-    const sel = document.getElementById("checkout-branch");
-    const branch = sel?.value?.trim();
-    if (!branch) { alert("Selecciona una rama"); return; }
+  const GIT_FORMS = {
+    new:    { form: "git-new-branch-form",    toggle: "new-branch-toggle",    focus: "branch-name" },
+    rename: { form: "git-rename-branch-form", toggle: "rename-branch-toggle", focus: "rename-branch-to" },
+    delete: { form: "git-delete-branch-form", toggle: "delete-branch-toggle", focus: "delete-branch-target" },
+  };
 
-    const btn = document.getElementById("checkout-btn");
-    if (btn) btn.disabled = true;
+  function toggleGitForm(key) {
+    const cfg = GIT_FORMS[key];
+    if (!cfg) return;
+    const form = document.getElementById(cfg.form);
+    if (!form) return;
+    const opening = form.style.display === "none";
+
+    // Cierra todos los forms primero
+    for (const k of Object.keys(GIT_FORMS)) {
+      const f = document.getElementById(GIT_FORMS[k].form);
+      const t = document.getElementById(GIT_FORMS[k].toggle);
+      if (f) { f.style.display = "none"; f.style.flexDirection = "column"; }
+      if (t) t.classList.remove("active");
+    }
+
+    if (opening) {
+      form.style.display = "flex";
+      form.style.flexDirection = "column";
+      document.getElementById(cfg.toggle)?.classList.add("active");
+      document.getElementById(cfg.focus)?.focus();
+    }
+  }
+
+  async function doCheckoutInline(branch) {
+    if (!branch) return;
+    const sel = document.querySelector(".git-branch-select");
+    if (sel) sel.disabled = true;
 
     const res = await fetch("/git/checkout", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -2842,6 +3059,68 @@
       await loadGitPanel();
     } else {
       alert("Error al cambiar de rama:\n" + data.out);
+      await loadGitPanel();
+    }
+  }
+
+  async function doRenameBranch() {
+    const oldName = document.getElementById("rename-branch-from")?.value?.trim();
+    const newName = document.getElementById("rename-branch-to")?.value?.trim();
+    if (!oldName || !newName) { alert("Completa ambos campos"); return; }
+    if (oldName === newName) return;
+
+    const btn = document.getElementById("rename-btn");
+    if (btn) btn.disabled = true;
+
+    const res = await fetch("/git/branch/rename", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ oldName, newName }),
+    });
+    const data = await res.json();
+
+    if (data.ok) {
+      addMessage("agent", `✅ Rama renombrada: <strong>${escHtml(oldName)}</strong> → <strong>${escHtml(newName)}</strong>`, { model: currentModel });
+      await loadGitPanel();
+    } else {
+      alert("Error al renombrar:\n" + data.out);
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function doDeleteBranch() {
+    const name = document.getElementById("delete-branch-target")?.value?.trim();
+    if (!name) { alert("Selecciona una rama para eliminar"); return; }
+    if (!confirm(`¿Eliminar la rama "${name}"?`)) return;
+
+    const btn = document.getElementById("delete-btn");
+    if (btn) btn.disabled = true;
+
+    const res = await fetch("/git/branch/delete", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    const data = await res.json();
+
+    if (data.ok) {
+      addMessage("agent", `🗑 Rama eliminada: <strong>${escHtml(name)}</strong>`, { model: currentModel });
+      await loadGitPanel();
+    } else {
+      // Si falla por cambios no mergeados, ofrecer forzar
+      if (/not fully merged/i.test(data.out)) {
+        if (confirm(`La rama tiene cambios sin mergear.\n¿Forzar eliminación?`)) {
+          const res2 = await fetch("/git/branch/delete", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, force: true }),
+          });
+          const data2 = await res2.json();
+          if (data2.ok) {
+            addMessage("agent", `🗑 Rama eliminada (forzado): <strong>${escHtml(name)}</strong>`, { model: currentModel });
+            await loadGitPanel();
+            return;
+          }
+        }
+      }
+      alert("Error al eliminar:\n" + data.out);
       if (btn) btn.disabled = false;
     }
   }
