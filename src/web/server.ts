@@ -12,6 +12,7 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import { MCPClient } from "../mcp/client.js";
 import { DevAgent } from "../agent/agent.js";
+import { ProviderRegistry } from "../providers/registry.js";
 import { TestAgent, CodeReviewAgent } from "../agents/index.js";
 import { logger } from "../utils/logger.js";
 import { getWorkspaceDir } from "../utils/security.js";
@@ -267,6 +268,18 @@ app.get("/providers/test", async (req: Request, res: Response) => {
   }
   try {
     const result = await devAgent!.testProvider(idx);
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.post("/providers/test/adhoc", async (req: Request<object, object, { apiKey?: string; model?: string; baseUrl?: string; headers?: string }>, res: Response) => {
+  const { apiKey, model, baseUrl, headers } = req.body;
+  if (!apiKey?.trim()) return res.status(400).json({ ok: false, error: "apiKey requerida" });
+  if (!model?.trim())  return res.status(400).json({ ok: false, error: "model requerido" });
+  try {
+    const result = await ProviderRegistry.testAdhoc({ apiKey, model, baseURL: baseUrl, headers });
     return res.json(result);
   } catch (err) {
     return res.status(500).json({ ok: false, error: (err as Error).message });

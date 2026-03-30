@@ -13,7 +13,7 @@ import type { Provider, ProviderInfo, ProviderSwitchEvent, LLMError } from "../t
 function loadProviders(): Provider[] {
   const providers: Provider[] = [];
 
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 1; i <= 20; i++) {
     const suffix = i === 1 ? "" : `_${i}`;
     const apiKey = process.env[`AI_API_KEY${suffix}`] ?? process.env[`OPENAI_API_KEY${suffix}`];
     if (!apiKey) break;
@@ -203,6 +203,48 @@ export class ProviderRegistry {
     try {
       await provider.client.chat.completions.create({
         model:    provider.model,
+        messages: [{ role: "user", content: "ping" }],
+        ...extra,
+      });
+      return { ok: true, latencyMs: Date.now() - t0 };
+    } catch (err) {
+      const e = err as LLMError;
+      return { ok: false, latencyMs: Date.now() - t0, error: e.message, errorCode: e.status };
+    }
+  }
+
+  /**
+   * Prueba una configuración ad-hoc sin necesidad de que esté en el registry.
+   * Útil para validar un proveedor antes de guardarlo.
+   */
+  static async testAdhoc(cfg: {
+    apiKey: string;
+    model: string;
+    baseURL?: string;
+    headers?: string;
+  }): Promise<{ ok: boolean; latencyMs?: number; error?: string; errorCode?: number }> {
+    let defaultHeaders: Record<string, string> | undefined;
+    if (cfg.headers?.trim()) {
+      try {
+        defaultHeaders = JSON.parse(cfg.headers) as Record<string, string>;
+      } catch {
+        return { ok: false, error: "Headers JSON inválido" };
+      }
+    }
+
+    const client = new OpenAI({
+      apiKey: cfg.apiKey,
+      ...(cfg.baseURL ? { baseURL: cfg.baseURL } : {}),
+      ...(defaultHeaders ? { defaultHeaders } : {}),
+    });
+
+    const isReasoningModel = /^o\d/i.test(cfg.model);
+    const extra = isReasoningModel ? {} : { max_tokens: 1 };
+
+    const t0 = Date.now();
+    try {
+      await client.chat.completions.create({
+        model:    cfg.model,
         messages: [{ role: "user", content: "ping" }],
         ...extra,
       });

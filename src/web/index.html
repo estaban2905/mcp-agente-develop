@@ -3197,6 +3197,12 @@
       return;
     }
     pl.innerHTML = allProviderConfigs.map((cfg, i) => renderProviderCard(cfg, i)).join("");
+    const total = allProviderConfigs.length;
+    if (total >= 20) {
+      pl.innerHTML += `<div style="margin-top:6px;padding:6px 8px;background:var(--red-dim);border:1px solid var(--red);border-radius:6px;font-size:11px;color:var(--red)">⛔ Límite de 20 proveedores alcanzado. No se pueden agregar más.</div>`;
+    } else if (total >= 15) {
+      pl.innerHTML += `<div style="margin-top:6px;padding:6px 8px;background:var(--yellow-dim);border:1px solid var(--yellow);border-radius:6px;font-size:11px;color:var(--yellow)">⚠ ${total}/20 proveedores. Te quedan ${20-total} slots.</div>`;
+    }
     // Restaurar cards que estaban expandidos antes del render
     expandedProviders.forEach(i => {
       const form  = document.getElementById(`pcfg-form-${i}`);
@@ -3237,6 +3243,19 @@
         </div>
         <div class="provider-config-form" id="pcfg-form-${i}" style="display:none">
           <div>
+            <div class="pcfg-label">Plantilla rápida</div>
+            <select class="pcfg-input" style="cursor:pointer" onchange="applyProviderTemplate(${i}, this.value); this.value=''">
+              <option value="">— Seleccionar plantilla —</option>
+              <option value="openai">OpenAI</option>
+              <option value="groq">Groq</option>
+              <option value="openrouter">OpenRouter</option>
+              <option value="cerebras">Cerebras</option>
+              <option value="anthropic">Anthropic (Claude)</option>
+              <option value="ollama">Ollama (local)</option>
+              <option value="mistral">Mistral</option>
+            </select>
+          </div>
+          <div>
             <div class="pcfg-label">Modelo</div>
             <input class="pcfg-input" type="text" placeholder="gpt-4o, llama-3.3…" value="${escHtml(cfg.model||'')}"
               oninput="allProviderConfigs[${i}].model=this.value; document.querySelector('#provider-item-${i} .provider-name').textContent='#${i+1} '+(this.value||'—')" />
@@ -3244,7 +3263,7 @@
           <div>
             <div class="pcfg-label">Base URL <span style="font-weight:400;text-transform:none">(vacío = OpenAI)</span></div>
             <input class="pcfg-input" type="text" placeholder="https://api.groq.com/openai/v1" value="${escHtml(cfg.baseUrl||'')}"
-              oninput="allProviderConfigs[${i}].baseUrl=this.value" />
+              oninput="allProviderConfigs[${i}].baseUrl=this.value; autoFillAnthropicHeaders(${i}, this.value)" />
           </div>
           <div>
             <div class="pcfg-label">API Key</div>
@@ -3265,6 +3284,7 @@
             <button class="btn-sm ${isEnabled?'provider-toggle-on':'provider-toggle-off'}" onclick="toggleProvider(${i})">${isEnabled?'✓ Activo':'⏸ Pausado'}</button>
             <button class="btn-sm" onclick="moveProvider(${i},-1)" ${i===0?'disabled':''}>↑</button>
             <button class="btn-sm" onclick="moveProvider(${i},1)" ${i===allProviderConfigs.length-1?'disabled':''}>↓</button>
+            <button class="btn-sm" style="color:var(--red);margin-left:auto" onclick="deleteProvider(${i})" title="Eliminar proveedor">✕</button>
           </div>
         </div>
       </div>`;
@@ -3301,22 +3321,38 @@
   }
 
   async function testProviderByConfig(cfgIdx) {
-    const regIdx = getRegistryIndex(cfgIdx);
-    if (regIdx < 0) return;
+    const cfg = allProviderConfigs[cfgIdx];
+    if (!cfg || cfg.enabled === false) return;
     const btn      = document.getElementById(`test-btn-${cfgIdx}`);
     const resultEl = document.getElementById(`test-result-${cfgIdx}`);
     if (!btn || !resultEl) return;
+
+    if (!cfg.apiKey?.trim()) {
+      resultEl.className = 'provider-test-result err';
+      resultEl.textContent = '✗ Falta API key';
+      return;
+    }
+    if (!cfg.model?.trim()) {
+      resultEl.className = 'provider-test-result err';
+      resultEl.textContent = '✗ Falta modelo';
+      return;
+    }
+
     btn.disabled = true;
     resultEl.className = 'provider-test-result testing';
     resultEl.textContent = 'Probando...';
     try {
-      const r = await fetch(`/providers/test?index=${regIdx}`).then(res => res.json());
+      const r = await fetch('/providers/test/adhoc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: cfg.apiKey, model: cfg.model, baseUrl: cfg.baseUrl, headers: cfg.headers }),
+      }).then(res => res.json());
       if (r.ok) {
         resultEl.className = 'provider-test-result ok';
         resultEl.textContent = `✓ ${r.latencyMs}ms`;
       } else {
-        const errLabels = { 429:'Rate limit', 401:'Auth inválida', 404:'No encontrado', 503:'Servicio caído' };
-        let msg = r.errorCode ? (errLabels[r.errorCode] || `Error ${r.errorCode}`) : (r.error?.slice(0,40) || 'Sin conexión');
+        const errLabels = { 429:'Rate limit', 401:'API key inválida', 404:'Modelo no encontrado', 503:'Servicio caído', 400:'Config inválida', 500:'Error del servidor', 502:'Bad gateway' };
+        const msg = r.errorCode ? (errLabels[r.errorCode] || `Error ${r.errorCode}`) : (r.error?.slice(0, 60) || 'Sin conexión');
         resultEl.className = 'provider-test-result err';
         resultEl.textContent = `✗ ${msg}`;
       }
@@ -3327,7 +3363,49 @@
     btn.disabled = false;
   }
 
+  const PROVIDER_TEMPLATES = {
+    groq:       { baseUrl: 'https://api.groq.com/openai/v1',      model: 'llama-3.3-70b-versatile',    headers: '' },
+    openrouter: { baseUrl: 'https://openrouter.ai/api/v1',         model: 'openai/gpt-4o',              headers: '{"HTTP-Referer":"https://github.com","X-OpenRouter-Title":"mcp-dev-agent"}' },
+    cerebras:   { baseUrl: 'https://api.cerebras.ai/v1',           model: 'qwen-3-235b-a22b-instruct-2507', headers: '' },
+    anthropic:  { baseUrl: 'https://api.anthropic.com/v1',         model: 'claude-sonnet-4-6',          headers: '{"anthropic-version":"2023-06-01","anthropic-beta":"tools-2024-04-04"}' },
+    ollama:     { baseUrl: 'http://localhost:11434/v1',             model: 'llama3',                     headers: '' },
+    mistral:    { baseUrl: 'https://api.mistral.ai/v1',             model: 'mistral-large-latest',       headers: '' },
+    openai:     { baseUrl: '',                                      model: 'gpt-4o',                     headers: '' },
+  };
+
+  function applyProviderTemplate(i, tplKey) {
+    if (!tplKey || !PROVIDER_TEMPLATES[tplKey]) return;
+    const tpl = PROVIDER_TEMPLATES[tplKey];
+    allProviderConfigs[i].baseUrl = tpl.baseUrl;
+    allProviderConfigs[i].model   = tpl.model;
+    if (tpl.headers) allProviderConfigs[i].headers = tpl.headers;
+    renderProviderList();
+    setTimeout(() => {
+      expandedProviders.add(i);
+      const form  = document.getElementById(`pcfg-form-${i}`);
+      const arrow = document.getElementById(`pcfg-arrow-${i}`);
+      if (form)  form.style.display = 'block';
+      if (arrow) arrow.style.transform = 'rotate(90deg)';
+    }, 10);
+  }
+
+  function autoFillAnthropicHeaders(i, url) {
+    if (url.includes('api.anthropic.com') && !allProviderConfigs[i].headers) {
+      const h = '{"anthropic-version":"2023-06-01","anthropic-beta":"tools-2024-04-04"}';
+      allProviderConfigs[i].headers = h;
+      const form = document.getElementById(`pcfg-form-${i}`);
+      if (form) {
+        const hInput = form.querySelector(`input[placeholder*='anthropic-version']`);
+        if (hInput) { hInput.value = h; const details = hInput.closest('details'); if (details) details.open = true; }
+      }
+    }
+  }
+
   function addProvider() {
+    if (allProviderConfigs.length >= 20) {
+      alert('Has alcanzado el límite de 20 proveedores.');
+      return;
+    }
     allProviderConfigs.push({ apiKey: "", model: "", baseUrl: "", headers: "", enabled: true });
     const newIdx = allProviderConfigs.length - 1;
     expandedProviders.add(newIdx); // auto-expandir la nueva card
@@ -3337,6 +3415,17 @@
 
   function toggleProvider(i) {
     allProviderConfigs[i].enabled = allProviderConfigs[i].enabled === false;
+    renderProviderList();
+  }
+
+  function deleteProvider(i) {
+    if (!confirm(`¿Eliminar proveedor #${i+1} (${allProviderConfigs[i].model || '—'})?`)) return;
+    allProviderConfigs.splice(i, 1);
+    // Remap expanded set
+    const newExpanded = new Set();
+    expandedProviders.forEach(idx => { if (idx < i) newExpanded.add(idx); else if (idx > i) newExpanded.add(idx - 1); });
+    expandedProviders.clear();
+    newExpanded.forEach(idx => expandedProviders.add(idx));
     renderProviderList();
   }
 
