@@ -35,8 +35,8 @@ import type {
   ProviderSwitchEvent,
 } from "../types/index.js";
 
-const NOTES_FILE = ".agent-notes.md";
-const ENV_PATH   = path.resolve(process.cwd(), ".env");
+const NOTES_FILE     = ".agent-notes.md";
+const PROVIDERS_FILE = path.resolve(process.cwd(), "providers.json");
 
 const execAsync = promisify(exec);
 
@@ -50,86 +50,17 @@ interface ProviderConfigRaw {
   enabled:  boolean;
 }
 
-function findEnvValue(lines: string[], key: string): string {
-  for (const line of lines) {
-    const t = line.trim();
-    if (t.startsWith(`${key}=`)) return t.slice(key.length + 1).trim();
+async function readJsonProviders(): Promise<ProviderConfigRaw[]> {
+  try {
+    const content = await fs.readFile(PROVIDERS_FILE, "utf-8");
+    return JSON.parse(content) as ProviderConfigRaw[];
+  } catch {
+    return [];
   }
-  return "";
 }
 
-async function readEnvProviders(): Promise<ProviderConfigRaw[]> {
-  let content = "";
-  try { content = await fs.readFile(ENV_PATH, "utf-8"); } catch { return []; }
-
-  const lines = content.split("\n");
-  const result: ProviderConfigRaw[] = [];
-
-  for (let i = 1; i <= 20; i++) {
-    const suffix = i === 1 ? "" : `_${i}`;
-    const apiKey = findEnvValue(lines, `AI_API_KEY${suffix}`);
-    if (!apiKey) break;
-    const enabledVal = findEnvValue(lines, `AI_ENABLED${suffix}`);
-    result.push({
-      apiKey,
-      model:   findEnvValue(lines, `AI_MODEL${suffix}`)   || "gpt-4o",
-      baseUrl: findEnvValue(lines, `AI_BASE_URL${suffix}`),
-      headers: findEnvValue(lines, `AI_HEADERS${suffix}`),
-      enabled: enabledVal !== "false",
-    });
-  }
-  return result;
-}
-
-async function writeEnvProviders(providers: ProviderConfigRaw[]): Promise<void> {
-  let content = "";
-  try { content = await fs.readFile(ENV_PATH, "utf-8"); } catch { content = ""; }
-
-  const providerVarRe     = /^(AI_API_KEY|AI_BASE_URL|AI_MODEL|AI_HEADERS|AI_ENABLED)(_\d+)?\s*=/;
-  const providerCommentRe = /^#\s*Proveedor\s+\d+/i;
-
-  // Filtrar líneas de proveedor existentes
-  const filtered = content.split("\n").filter(
-    l => !providerVarRe.test(l.trim()) && !providerCommentRe.test(l.trim())
-  );
-
-  // Punto de inserción: justo antes de WORKSPACE_DIR o al final
-  let insertIdx = filtered.findIndex(l => /^WORKSPACE_DIR\s*=/.test(l.trim()));
-  if (insertIdx < 0) insertIdx = filtered.length;
-
-  // Construir bloque nuevo
-  const block: string[] = [];
-  for (let i = 0; i < providers.length; i++) {
-    const p      = providers[i];
-    const suffix = i === 0 ? "" : `_${i + 1}`;
-    block.push(`# Proveedor ${i + 1}${p.enabled === false ? " [DESACTIVADO]" : ""}`);
-    block.push(`AI_API_KEY${suffix}=${p.apiKey}`);
-    if (p.baseUrl) block.push(`AI_BASE_URL${suffix}=${p.baseUrl}`);
-    block.push(`AI_MODEL${suffix}=${p.model}`);
-    if (p.headers) block.push(`AI_HEADERS${suffix}=${p.headers}`);
-    if (p.enabled === false) block.push(`AI_ENABLED${suffix}=false`);
-    block.push("");
-  }
-
-  filtered.splice(insertIdx, 0, ...block);
-  await fs.writeFile(ENV_PATH, filtered.join("\n"), "utf-8");
-
-  // Actualizar process.env en memoria
-  for (let i = 1; i <= 20; i++) {
-    const suffix = i === 1 ? "" : `_${i}`;
-    ["AI_API_KEY", "AI_BASE_URL", "AI_MODEL", "AI_HEADERS", "AI_ENABLED"].forEach(k => {
-      delete process.env[`${k}${suffix}`];
-    });
-  }
-  for (let i = 0; i < providers.length; i++) {
-    const p      = providers[i];
-    const suffix = i === 0 ? "" : `_${i + 1}`;
-    process.env[`AI_API_KEY${suffix}`]  = p.apiKey;
-    if (p.baseUrl) process.env[`AI_BASE_URL${suffix}`] = p.baseUrl;
-    process.env[`AI_MODEL${suffix}`]    = p.model;
-    if (p.headers) process.env[`AI_HEADERS${suffix}`]  = p.headers;
-    if (p.enabled === false) process.env[`AI_ENABLED${suffix}`] = "false";
-  }
+async function writeJsonProviders(providers: ProviderConfigRaw[]): Promise<void> {
+  await fs.writeFile(PROVIDERS_FILE, JSON.stringify(providers, null, 2), "utf-8");
 }
 
 async function gitExecPanel(args: string): Promise<GitPanelResult> {
@@ -236,7 +167,7 @@ app.get("/stats", (_req: Request, res: Response) => {
 
 app.get("/providers", async (_req: Request, res: Response) => {
   try {
-    const providers = await readEnvProviders();
+    const providers = await readJsonProviders();
     return res.json({ ok: true, providers });
   } catch (err) {
     return res.status(500).json({ ok: false, error: (err as Error).message });
@@ -253,7 +184,7 @@ app.post("/providers", async (req: Request<object, object, { providers: Provider
       if (!p.apiKey?.trim()) return res.status(400).json({ ok: false, error: "Todos los proveedores necesitan API key" });
       if (!p.model?.trim())  return res.status(400).json({ ok: false, error: "Todos los proveedores necesitan modelo" });
     }
-    await writeEnvProviders(providers);
+    await writeJsonProviders(providers);
     devAgent!.reloadProviders();
     return res.json({ ok: true, count: providers.length });
   } catch (err) {

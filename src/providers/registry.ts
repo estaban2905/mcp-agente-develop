@@ -6,36 +6,79 @@
 // =============================================
 
 import OpenAI from "openai";
+import { readFileSync, writeFileSync } from "fs";
+import path from "path";
 import { logger } from "../utils/logger.js";
 import { config } from "../config/index.js";
 import type { Provider, ProviderInfo, ProviderSwitchEvent, LLMError } from "../types/index.js";
 
-function loadProviders(): Provider[] {
-  const providers: Provider[] = [];
+export const PROVIDERS_FILE = path.resolve(process.cwd(), "providers.json");
 
+interface ProviderConfig {
+  apiKey:   string;
+  model:    string;
+  baseUrl?: string;
+  headers?: string;
+  enabled?: boolean;
+}
+
+/** Migra proveedores desde .env a providers.json si el archivo no existe aún. */
+function migrateFromEnvIfNeeded(): void {
+  try {
+    readFileSync(PROVIDERS_FILE, "utf-8");
+    return; // ya existe, no migrar
+  } catch { /* no existe, continuar */ }
+
+  const configs: ProviderConfig[] = [];
   for (let i = 1; i <= 20; i++) {
     const suffix = i === 1 ? "" : `_${i}`;
     const apiKey = process.env[`AI_API_KEY${suffix}`] ?? process.env[`OPENAI_API_KEY${suffix}`];
     if (!apiKey) break;
+    configs.push({
+      apiKey,
+      model:    process.env[`AI_MODEL${suffix}`] ?? "gpt-4o",
+      baseUrl:  process.env[`AI_BASE_URL${suffix}`] || undefined,
+      headers:  process.env[`AI_HEADERS${suffix}`]  || undefined,
+      enabled:  process.env[`AI_ENABLED${suffix}`] !== "false",
+    });
+  }
 
-    // Si está explícitamente desactivado, lo omitimos pero seguimos escaneando
-    if (process.env[`AI_ENABLED${suffix}`] === "false") {
-      logger.debug(`Proveedor ${i} desactivado (AI_ENABLED${suffix}=false), omitido.`);
+  if (configs.length > 0) {
+    writeFileSync(PROVIDERS_FILE, JSON.stringify(configs, null, 2), "utf-8");
+    logger.info(`Migrados ${configs.length} proveedor(es) de .env → providers.json`);
+  }
+}
+
+function loadProviders(): Provider[] {
+  migrateFromEnvIfNeeded();
+
+  let configs: ProviderConfig[] = [];
+  try {
+    configs = JSON.parse(readFileSync(PROVIDERS_FILE, "utf-8")) as ProviderConfig[];
+  } catch {
+    throw new Error("No se pudo cargar providers.json. Configura los proveedores desde la UI web.");
+  }
+
+  const providers: Provider[] = [];
+
+  for (let i = 0; i < configs.length; i++) {
+    const cfg = configs[i];
+    if (!cfg.apiKey?.trim()) continue;
+
+    if (cfg.enabled === false) {
+      logger.debug(`Proveedor #${i + 1} (${cfg.model}) desactivado, omitido.`);
       continue;
     }
 
-    const model   = process.env[`AI_MODEL${suffix}`] ?? process.env[`OPENAI_MODEL${suffix}`] ?? "gpt-4o";
-    const baseURL = process.env[`AI_BASE_URL${suffix}`];
-    const name    = `provider-${i} (${model})`;
+    const model = cfg.model || "gpt-4o";
+    const name  = `provider-${i + 1} (${model})`;
 
-    // Soporte para headers custom (p. ej. anthropic-version para la API de Anthropic)
-    const headersRaw = process.env[`AI_HEADERS${suffix}`];
     let defaultHeaders: Record<string, string> | undefined;
-    if (headersRaw) {
+    if (cfg.headers?.trim()) {
       try {
-        defaultHeaders = JSON.parse(headersRaw) as Record<string, string>;
+        defaultHeaders = JSON.parse(cfg.headers) as Record<string, string>;
       } catch {
-        logger.warn(`AI_HEADERS${suffix} no es JSON válido, se ignorará.`);
+        logger.warn(`Headers JSON inválido para proveedor #${i + 1}, se ignorará.`);
       }
     }
 
@@ -43,19 +86,19 @@ function loadProviders(): Provider[] {
       name,
       model,
       client: new OpenAI({
-        apiKey,
-        ...(baseURL        ? { baseURL }        : {}),
-        ...(defaultHeaders ? { defaultHeaders }  : {}),
+        apiKey: cfg.apiKey,
+        ...(cfg.baseUrl       ? { baseURL: cfg.baseUrl } : {}),
+        ...(defaultHeaders    ? { defaultHeaders }        : {}),
       }),
       failures:  0,
       openUntil: 0,
     });
 
-    logger.debug(`Proveedor cargado: ${name}${baseURL ? ` @ ${baseURL}` : ""}`);
+    logger.debug(`Proveedor cargado: ${name}${cfg.baseUrl ? ` @ ${cfg.baseUrl}` : ""}`);
   }
 
   if (providers.length === 0) {
-    throw new Error("No hay proveedores configurados. Revisa AI_API_KEY en .env");
+    throw new Error("No hay proveedores activos en providers.json. Activa al menos uno desde la UI.");
   }
 
   logger.info(`${providers.length} proveedor(es) de IA cargados.`);
@@ -255,7 +298,7 @@ export class ProviderRegistry {
     }
   }
 
-  /** Recarga los proveedores desde process.env (útil después de editar el .env en caliente). */
+  /** Recarga los proveedores desde providers.json (útil después de guardar cambios en la UI). */
   reload(): void {
     this.providers    = loadProviders();
     this.currentIndex = 0;
