@@ -42,7 +42,8 @@ export class MCPClient {
     // Soporte para dev (tsx) y producción (node)
     const isDev = import.meta.url.endsWith(".ts");
     const serverFile = isDev ? "server.ts" : "server.js";
-    const command = isDev ? "tsx" : "node";
+    const tsxBin = path.resolve(__dirname, "../../node_modules/.bin/tsx");
+    const command = isDev ? tsxBin : "node";
     const serverPath = path.resolve(__dirname, serverFile);
 
     logger.info(`Conectando al MCP Server: ${serverPath}`);

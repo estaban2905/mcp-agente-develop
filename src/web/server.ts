@@ -10,6 +10,9 @@ import fs from "fs/promises";
 import { fileURLToPath } from "url";
 import { exec } from "child_process";
 import { promisify } from "util";
+import { createServer } from "http";
+import { WebSocketServer, WebSocket } from "ws";
+import * as pty from "node-pty";
 import { MCPClient } from "../mcp/client.js";
 import { DevAgent } from "../agent/agent.js";
 import { ProviderRegistry } from "../providers/registry.js";
@@ -662,6 +665,54 @@ app.post("/chat/confirm", (req: Request<object, object, { id: string; approved: 
 
 // ─── Arranque ─────────────────────────────────────────────────────────────────
 
+const httpServer = createServer(app);
+
+// ─── Terminal WebSocket ───────────────────────────────────────────────────────
+
+const wss = new WebSocketServer({ server: httpServer, path: "/terminal" });
+
+wss.on("connection", (ws: WebSocket) => {
+  const cwd = getWorkspaceDir();
+  const shell = process.env.SHELL || "/bin/bash";
+
+  const ptyProc = pty.spawn(shell, [], {
+    name: "xterm-256color",
+    cols: 120,
+    rows: 30,
+    cwd,
+    env: process.env as Record<string, string>,
+  });
+
+  ptyProc.onData((data: string) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      const b64 = Buffer.from(data, "utf-8").toString("base64");
+      ws.send(JSON.stringify({ type: "data", data: b64 }));
+    }
+  });
+
+  ptyProc.onExit(({ exitCode }) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "exit", code: exitCode }));
+      ws.close();
+    }
+  });
+
+  ws.on("message", (msg: Buffer) => {
+    try {
+      const parsed = JSON.parse(msg.toString()) as { type: string; data?: string; cols?: number; rows?: number };
+      if (parsed.type === "input" && parsed.data) {
+        ptyProc.write(Buffer.from(parsed.data, "base64").toString("utf-8"));
+      } else if (parsed.type === "resize" && parsed.cols && parsed.rows) {
+        ptyProc.resize(parsed.cols, parsed.rows);
+      }
+    } catch { /* ignore malformed */ }
+  });
+
+  ws.on("close", () => {
+    try { ptyProc.kill(); } catch { /* ignore */ }
+  });
+});
+
 process.on("SIGINT", async () => {
   await mcpClient.disconnect();
   process.exit(0);
@@ -669,7 +720,7 @@ process.on("SIGINT", async () => {
 
 initAgent()
   .then(() =>
-    app.listen(config.webPort, () => {
+    httpServer.listen(config.webPort, () => {
       console.log(`\n🌐  Abre tu navegador en http://localhost:${config.webPort}\n`);
     })
   )
