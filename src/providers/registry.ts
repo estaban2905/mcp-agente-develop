@@ -28,6 +28,9 @@ interface ProviderConfig {
  * Se usa cuando providers.json no especifica contextWindow.
  */
 const KNOWN_CONTEXT_WINDOWS: Record<string, number> = {
+  // Ollama local
+  "llama3":                       8192,
+  "llama3:latest":                8192,
   // Groq
   "llama-3.1-8b-instant":       131072,
   "llama-3.3-70b-versatile":     32768,
@@ -241,6 +244,12 @@ export class ProviderRegistry {
         if (lastError.status === 401) {
           this.recordFailure(provider, 401);
           throw new Error(`API Key inválida en ${provider.name}. Verifica .env`);
+        }
+
+        // El modelo no soporta tools/function calling — error permanente, no rotatable
+        if (lastError.status === 400 && (lastError.message ?? "").toLowerCase().includes("does not support tools")) {
+          this.recordFailure(provider, 400);
+          throw new Error(`El modelo ${provider.model} no soporta tool calling. Usa llama3.1, qwen2.5 o mistral.`);
         }
 
         // 400 es rotatable: puede ser contexto grande, tool call inválido, o límite del modelo
