@@ -1,7 +1,7 @@
 import { Groq } from "groq-sdk";
 
 const groq = new Groq({
-  apiKey: "GROQ_API_KEY_PLACEHOLDER_2", // ⚠️ usa variable de entorno
+  apiKey: process.env.GROQ_API_KEY,
 });
 
 console.log(process.env.GROQ_API_KEY);
