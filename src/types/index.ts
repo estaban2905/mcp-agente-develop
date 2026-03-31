@@ -56,6 +56,7 @@ export interface Provider {
   failures: number;
   openUntil: number;
   lastErrorCode?: number;
+  contextWindow?: number;  // tokens máximos del modelo (opcional)
 }
 
 export interface ProviderInfo {
@@ -106,12 +107,19 @@ export interface ConfirmEvent {
 
 // ─── Error types ──────────────────────────────────────────────────────────────
 
+export interface ProviderFailure {
+  name:   string;
+  reason: string;
+  code?:  number;
+}
+
 export interface LLMError extends Error {
   status?: number;
   _rotatable?: boolean;
   isToolValidationError?: boolean;
   isContextTooLarge?: boolean;
   allFailed?: boolean;
+  failedProviders?: ProviderFailure[];
 }
 
 // ─── Tool parameter types ─────────────────────────────────────────────────────

@@ -10,16 +10,49 @@ import { readFileSync, writeFileSync } from "fs";
 import path from "path";
 import { logger } from "../utils/logger.js";
 import { config } from "../config/index.js";
-import type { Provider, ProviderInfo, ProviderSwitchEvent, LLMError } from "../types/index.js";
+import type { Provider, ProviderInfo, ProviderSwitchEvent, LLMError, ProviderFailure } from "../types/index.js";
 
 export const PROVIDERS_FILE = path.resolve(process.cwd(), "providers.json");
 
 interface ProviderConfig {
-  apiKey:   string;
-  model:    string;
-  baseUrl?: string;
-  headers?: string;
-  enabled?: boolean;
+  apiKey:         string;
+  model:          string;
+  baseUrl?:       string;
+  headers?:       string;
+  enabled?:       boolean;
+  contextWindow?: number;  // límite de tokens del modelo
+}
+
+/**
+ * Ventanas de contexto conocidas por defecto (tokens).
+ * Se usa cuando providers.json no especifica contextWindow.
+ */
+const KNOWN_CONTEXT_WINDOWS: Record<string, number> = {
+  // Groq
+  "llama-3.1-8b-instant":       131072,
+  "llama-3.3-70b-versatile":     32768,
+  "qwen/qwen3-32b":              32768,
+  // OpenAI
+  "gpt-4.1":                   1047576,
+  "gpt-4.1-mini":              1047576,
+  "o4-mini":                    200000,
+  // Anthropic
+  "claude-sonnet-4-6":          200000,
+  // OpenRouter (heredan del modelo base)
+  "google/gemini-2.0-flash-001": 1000000,
+  "openai/gpt-4o":               128000,
+  "qwen/qwen3.5-7b-instruct":    32768,
+};
+
+/** Devuelve la ventana de contexto conocida para un modelo, o undefined si no se conoce. */
+export function getKnownContextWindow(model: string): number | undefined {
+  // Búsqueda exacta primero
+  if (KNOWN_CONTEXT_WINDOWS[model]) return KNOWN_CONTEXT_WINDOWS[model];
+  // Búsqueda parcial (ej. "openai/gpt-4o" contiene "gpt-4o")
+  for (const [key, val] of Object.entries(KNOWN_CONTEXT_WINDOWS)) {
+    if (model.includes(key) || key.includes(model)) return val;
+  }
+  return undefined;
 }
 
 /** Migra proveedores desde .env a providers.json si el archivo no existe aún. */
@@ -82,6 +115,8 @@ function loadProviders(): Provider[] {
       }
     }
 
+    const contextWindow = cfg.contextWindow ?? getKnownContextWindow(model);
+
     providers.push({
       name,
       model,
@@ -92,17 +127,31 @@ function loadProviders(): Provider[] {
       }),
       failures:  0,
       openUntil: 0,
+      ...(contextWindow ? { contextWindow } : {}),
     });
 
-    logger.debug(`Proveedor cargado: ${name}${cfg.baseUrl ? ` @ ${cfg.baseUrl}` : ""}`);
+    logger.debug(`Proveedor cargado: ${name}${cfg.baseUrl ? ` @ ${cfg.baseUrl}` : ""}${contextWindow ? ` [ctx: ${contextWindow}]` : ""}`);
   }
 
   if (providers.length === 0) {
-    throw new Error("No hay proveedores activos en providers.json. Activa al menos uno desde la UI.");
+    logger.warn("No hay proveedores activos en providers.json. Activa al menos uno desde la UI.");
+  } else {
+    logger.info(`${providers.length} proveedor(es) de IA cargados.`);
   }
-
-  logger.info(`${providers.length} proveedor(es) de IA cargados.`);
   return providers;
+}
+
+/**
+ * Detecta modelos de razonamiento que no aceptan max_tokens bajo.
+ * Incluye: OpenAI o-series, Qwen3, GPT OSS (Groq), QwQ, DeepSeek-R1.
+ */
+export function isReasoningModel(model: string): boolean {
+  return /^o\d/i.test(model)                    // o1, o3, o4-mini (OpenAI)
+    || /qwen[^/]*3/i.test(model)                // qwen3-32b, qwen/qwen3-*
+    || /gpt-oss/i.test(model)                   // openai/gpt-oss-120b, gpt-oss-20b
+    || /qwq/i.test(model)                       // qwen-qwq-32b
+    || /deepseek-r/i.test(model)                // deepseek-r1, deepseek-r2
+    || /llama-4/i.test(model);                  // llama-4-scout, llama-4-maverick
 }
 
 export class ProviderRegistry {
@@ -143,6 +192,10 @@ export class ProviderRegistry {
     return false;
   }
 
+  hasProviders(): boolean {
+    return this.providers.length > 0;
+  }
+
   /**
    * Ejecuta fn(provider) con round-robin + circuit breaker + fallback.
    * Salta proveedores con circuito abierto.
@@ -152,9 +205,17 @@ export class ProviderRegistry {
     fn: (provider: Provider) => Promise<T>,
     onEvent: ((event: ProviderSwitchEvent) => void) | null = null
   ): Promise<T> {
+    if (this.providers.length === 0) {
+      throw Object.assign(
+        new Error("No hay proveedores activos. Activa al menos uno desde el panel lateral."),
+        { allFailed: true }
+      );
+    }
+
     const startIndex = this.currentIndex;
     let lastError: LLMError | null = null;
     let skipped = 0;
+    const failedProviders: ProviderFailure[] = [];
 
     for (let i = 0; i < this.providers.length; i++) {
       const idx      = (startIndex + i) % this.providers.length;
@@ -162,6 +223,7 @@ export class ProviderRegistry {
 
       if (!this.isAvailable(provider)) {
         skipped++;
+        failedProviders.push({ name: provider.name, reason: "circuit breaker abierto", code: provider.lastErrorCode });
         logger.debug(`Saltando ${provider.name} (circuit breaker abierto).`);
         continue;
       }
@@ -174,6 +236,7 @@ export class ProviderRegistry {
 
       } catch (err) {
         lastError = err as LLMError;
+        logger.warn(`[registry] Error en ${provider.name}: type=${lastError.constructor?.name} status=${lastError.status} msg=${lastError.message?.slice(0, 120)}`);
 
         if (lastError.status === 401) {
           this.recordFailure(provider, 401);
@@ -181,19 +244,23 @@ export class ProviderRegistry {
         }
 
         // 400 es rotatable: puede ser contexto grande, tool call inválido, o límite del modelo
-        const rotatableStatus = new Set([400, 429, 404, 503, 502, 500, 413]);
-        const isTooBig = lastError.status === 400 && (lastError.message ?? "").toLowerCase().includes("too large");
+        const rotatableStatus = new Set([400, 402, 429, 404, 503, 502, 500, 413]);
+        const isTooBig = (lastError.status === 400 || lastError.status === 413 || lastError.status === undefined) 
+          && (lastError.message ?? "").toLowerCase().includes("too large");
         // Errores de red (APIConnectionError, timeout, DNS) no tienen status — rotar igual
-        const isNetworkError = lastError.status === undefined;
+        const isNetworkError = lastError.status === undefined && !(lastError.message ?? "").toLowerCase().includes("too large");
 
         if (rotatableStatus.has(lastError.status ?? 0) || isTooBig || lastError._rotatable || isNetworkError) {
           this.recordFailure(provider, isNetworkError ? undefined : lastError.status);
           const reasons: Record<number, string> = {
-            429: "rate limit", 404: "modelo no encontrado",
+            402: "sin créditos", 429: "rate limit", 404: "modelo no encontrado",
             503: "servicio no disponible", 502: "bad gateway",
             500: "error interno", 413: "contexto grande",
           };
-          const reason = isNetworkError ? "error de red" : (reasons[lastError.status ?? 0] ?? "error de proveedor");
+          const reason = isNetworkError 
+            ? "error de red" 
+            : ((lastError.message ?? "").toLowerCase().includes("too large") ? "contexto grande" : (reasons[lastError.status ?? 0] ?? "error de proveedor"));
+          failedProviders.push({ name: provider.name, reason, code: isNetworkError ? undefined : lastError.status });
           const circuitOpen = provider.failures >= config.circuitThreshold;
           logger.warn(`${provider.name} falló (${reason}: ${lastError.status}).${circuitOpen ? " Circuito abierto." : " Rotando..."}`);
           onEvent?.({ type: "providerSwitch", from: provider.name, reason });
@@ -207,12 +274,22 @@ export class ProviderRegistry {
     if (skipped === this.providers.length) {
       throw Object.assign(
         new Error("Todos los proveedores tienen el circuit breaker abierto. Espera un momento."),
-        { allFailed: true }
+        { allFailed: true, failedProviders }
       );
     }
+
+    // Avanzar el índice al siguiente proveedor para que el panel refleje
+    // el último intentado y el próximo ciclo no empiece siempre desde el mismo.
+    this.currentIndex = (startIndex + this.providers.length - 1) % this.providers.length;
+
+    // Si TODOS fallaron por contexto grande, propagar isContextTooLarge
+    // para que processMessage pueda recortar el historial y reintentar.
+    const allContextTooLarge =
+      failedProviders.length > 0 &&
+      failedProviders.every(p => p.reason === "contexto grande");
     throw Object.assign(
       new Error(`Todos los proveedores fallaron. Último error: ${lastError?.message}`),
-      { allFailed: true }
+      { allFailed: true, failedProviders, isContextTooLarge: allContextTooLarge }
     );
   }
 
@@ -237,10 +314,7 @@ export class ProviderRegistry {
     const provider = this.providers[index];
     if (!provider) return { ok: false, error: "Proveedor no encontrado" };
 
-    // Los modelos de razonamiento (o1, o3, o4-*) no aceptan max_tokens
-    // y requieren tokens suficientes para el reasoning interno.
-    const isReasoningModel = /^o\d/i.test(provider.model);
-    const extra = isReasoningModel ? {} : { max_tokens: 1 };
+    const extra = isReasoningModel(provider.model) ? {} : { max_tokens: 1 };
 
     const t0 = Date.now();
     try {
@@ -281,8 +355,7 @@ export class ProviderRegistry {
       ...(defaultHeaders ? { defaultHeaders } : {}),
     });
 
-    const isReasoningModel = /^o\d/i.test(cfg.model);
-    const extra = isReasoningModel ? {} : { max_tokens: 1 };
+    const extra = isReasoningModel(cfg.model) ? {} : { max_tokens: 1 };
 
     const t0 = Date.now();
     try {

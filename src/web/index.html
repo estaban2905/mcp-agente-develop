@@ -30,7 +30,7 @@
       --red-dim: #5a1f1f;
       --purple: #a371f7;
       --tool-bg: #1c2128;
-      --aside-width: 280px;
+      --aside-width: 360px;
     }
 
     body {
@@ -643,6 +643,27 @@
     .provider-dot.error { background: var(--red); animation: pulse 1.5s infinite; }
     .provider-dot.warning { background: var(--yellow); }
     .provider-dot.idle { background: var(--text-dim); }
+    .provider-platform-tag {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .provider-platform-tag.tag-groq       { background: #1a3a2a; color: #3fb950; border: 1px solid #2a5a3a; }
+    .provider-platform-tag.tag-openrouter { background: #2a1a3a; color: #a371f7; border: 1px solid #4a2a6a; }
+    .provider-platform-tag.tag-openai     { background: #1a3a2a; color: #58a6ff; border: 1px solid #1f3a5f; }
+    .provider-platform-tag.tag-anthropic  { background: #3a2a1a; color: #e06c3a; border: 1px solid #6a3a1a; }
+    .provider-platform-tag.tag-cerebras   { background: #1a2a3a; color: #58a6ff; border: 1px solid #1a3a5a; }
+    .provider-platform-tag.tag-huggingface{ background: #3a2a10; color: #d29922; border: 1px solid #5a4a10; }
+    .provider-platform-tag.tag-vercel     { background: #2a2a2a; color: #e6edf3; border: 1px solid #4a4a4a; }
+    .provider-platform-tag.tag-cloudflare { background: #3a2010; color: #e06c3a; border: 1px solid #6a3010; }
+    .provider-platform-tag.tag-local      { background: #1a1a2a; color: #7d8590; border: 1px solid #2a2a4a; }
+    .provider-platform-tag.tag-mistral    { background: #1a1a3a; color: #79b8ff; border: 1px solid #2a2a5a; }
+    .provider-platform-tag.tag-unknown    { background: var(--surface-hover); color: var(--text-muted); border: 1px solid var(--border); }
     .provider-name {
       flex: 1;
       color: var(--text);
@@ -1457,32 +1478,54 @@
       margin-bottom: 2px;
     }
     .pcfg-input {
-      background: var(--surface);
+      background: var(--bg);
       border: 1px solid var(--border);
-      border-radius: 3px;
-      padding: 4px 6px;
+      border-radius: 5px;
+      padding: 6px 8px;
       color: var(--text);
-      font-size: 11px;
+      font-size: 12px;
       width: 100%;
       outline: none;
       transition: border-color .15s;
     }
     .pcfg-input:focus { border-color: var(--accent); }
     .pcfg-input::placeholder { color: var(--text-dim); }
-    .pcfg-key-row { display: flex; gap: 3px; }
-    .pcfg-key-row .pcfg-input { flex: 1; font-family: monospace; font-size: 10px; }
+    .pcfg-key-row { display: flex; gap: 4px; }
+    .pcfg-key-row .pcfg-input { flex: 1; font-family: monospace; font-size: 11px; letter-spacing: .03em; }
+    .pcfg-key-actions { display: flex; gap: 3px; flex-shrink: 0; }
+    .pcfg-key-indicator {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+    .pcfg-key-indicator.set   { color: var(--green);  background: var(--green-dim); }
+    .pcfg-key-indicator.empty { color: var(--yellow); background: var(--yellow-dim); }
     .pcfg-details-summary {
-      font-size: 9px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .5px;
-      color: var(--text-dim);
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
       cursor: pointer;
       user-select: none;
     }
-    .pcfg-details-summary:hover { color: var(--text-muted); }
-    .pcfg-actions { display: flex; gap: 3px; margin-top: 2px; }
+    .pcfg-details-summary:hover { color: var(--text); }
+    .pcfg-actions { display: flex; gap: 3px; margin-top: 4px; }
     .pcfg-actions .btn-sm { flex: 1; font-size: 10px; padding: 3px 4px; justify-content: center; }
+    .pcfg-save-btn {
+      width: 100%;
+      padding: 6px;
+      margin-top: 4px;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent);
+      border-radius: 5px;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .pcfg-save-btn:hover { background: var(--accent); color: #000; }
+    .pcfg-save-btn.saved  { background: var(--green-dim); border-color: var(--green); color: var(--green); }
     .provider-toggle-on  { color: var(--green)  !important; }
     .provider-toggle-off { color: var(--text-dim) !important; }
     .providers-aside-footer {
@@ -1591,16 +1634,19 @@
 
     <div id="chat"></div>
 
+    <div id="no-provider-banner" style="display:none;margin:0 16px 8px;padding:10px 14px;background:var(--yellow-dim);border:1px solid var(--yellow);border-radius:8px;font-size:13px;color:var(--yellow);align-items:center;gap:10px">
+      <span>⚠</span>
+      <span style="flex:1">No hay proveedores activos. Activa al menos un modelo desde el panel lateral para poder chatear.</span>
+      <button class="btn-sm" onclick="toggleAside()" style="border-color:var(--yellow);color:var(--yellow);white-space:nowrap">Abrir panel ☰</button>
+    </div>
+
     <footer>
-      <div class="agent-selector" style="display:flex;align-items:center;margin-bottom:10px;">
-        <label for="agent-select" style="margin-right:8px;font-size:12px;color:var(--text-muted)">Agente:</label>
-        <select id="agent-select" onchange="onAgentChange()" style="padding:4px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;cursor:pointer;">
-          <option value="dev">🤖 Dev Agent</option>
-          <option value="test">🧪 Test Agent</option>
-          <option value="codereview">🔍 Code Review</option>
-        </select>
-      </div>
       <div class="input-wrapper">
+        <select id="agent-select" onchange="onAgentChange()" title="Agente" style="padding:4px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;cursor:pointer;flex-shrink:0;align-self:flex-end;margin-bottom:2px;">
+          <option value="dev">🤖 Dev</option>
+          <option value="test">🧪 Test</option>
+          <option value="codereview">🔍 Review</option>
+        </select>
         <textarea id="input" placeholder="Describe tu tarea de desarrollo... (Enter para enviar, Shift+Enter para nueva línea)" rows="1"></textarea>
         <button id="send-btn" onclick="sendMessage()">Enviar</button>
       </div>
@@ -1789,7 +1835,7 @@
 
   function onAgentChange() {
     selectedAgent = document.getElementById("agent-select").value;
-    clearHistory();
+    loadChatHistory(selectedAgent);
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1946,53 +1992,72 @@
     if (!busy) refreshStats();
   }, 3000);
 
-  // ── Chat Persistence (localStorage) ───────────────────────────────────────────
-  const CHAT_HISTORY_KEY = "mcp-chat-history";
+  // ── Chat Persistence (localStorage por agente) ────────────────────────────────
   const CHAT_WORKSPACE_KEY = "mcp-chat-workspace";
+  const AGENT_IDS = ["dev", "test", "codereview"];
   let chatLoaded = false;
+
+  function chatKey(agent) {
+    return `mcp-chat-${agent || selectedAgent}`;
+  }
 
   function saveChatMessage(role, html, meta = {}) {
     try {
-      const history = JSON.parse(localStorage.getItem(CHAT_HISTORY_KEY) || "[]");
-      history.push({
-        role,
-        html,
-        meta,
-        timestamp: Date.now()
-      });
+      const key = chatKey();
+      const history = JSON.parse(localStorage.getItem(key) || "[]");
+      history.push({ role, html, meta, timestamp: Date.now() });
       if (history.length > 100) {
-        localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(history.slice(-100)));
+        localStorage.setItem(key, JSON.stringify(history.slice(-100)));
       } else {
-        localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(history));
+        localStorage.setItem(key, JSON.stringify(history));
       }
     } catch (e) { console.error("Error saving chat:", e); }
   }
 
-  async function loadChatHistory() {
+  function renderHistoryMessages(history) {
+    for (const msg of history) {
+      const div = document.createElement("div");
+      div.className = `msg ${msg.role}`;
+      let metaHtml = "";
+      if (msg.role === "user") {
+        metaHtml = `<div class="msg-meta"><span class="msg-time">${formatTime(new Date(msg.timestamp))}</span></div>`;
+      } else if (msg.meta && msg.meta.model) {
+        const doneMetaHtml = (msg.meta.iterations != null && msg.meta.toolCalls != null)
+          ? `<span class="done-meta-inline">· ✅ ${msg.meta.iterations} iter · 🔧 ${msg.meta.toolCalls} tools</span>`
+          : "";
+        metaHtml = `<div class="msg-meta"><span class="msg-model">${escHtml(msg.meta.model)}</span><span class="msg-time">${formatTime(new Date(msg.timestamp))}</span>${doneMetaHtml}</div>`;
+      }
+      div.innerHTML = `
+        <div class="msg-avatar">${msg.role === "user" ? "🧑" : "🤖"}</div>
+        <div class="msg-content">
+          ${metaHtml}
+          <div class="bubble">${msg.html}</div>
+        </div>`;
+      chat.appendChild(div);
+      if (msg.role === "agent" && msg.meta && msg.meta.iterations != null) {
+        const meta = div.querySelector(".msg-meta");
+        if (meta) {
+          const btn = document.createElement("button");
+          btn.className = "save-note-btn";
+          btn.title = "Guardar respuesta como nota del proyecto";
+          btn.textContent = "📝 Guardar";
+          btn.addEventListener("click", () => saveLastResponseAsNote(btn));
+          meta.appendChild(btn);
+        }
+      }
+    }
+  }
+
+  async function loadChatHistory(agent) {
     try {
       const { path: currentPath } = await fetch("/workspace").then(r => r.json());
       const savedWorkspace = localStorage.getItem(CHAT_WORKSPACE_KEY);
-      const history = JSON.parse(localStorage.getItem(CHAT_HISTORY_KEY) || "[]");
-      
+      const key = chatKey(agent || selectedAgent);
+      const history = JSON.parse(localStorage.getItem(key) || "[]");
+
+      chat.innerHTML = "";
       if (history.length > 0 && savedWorkspace === currentPath) {
-        chat.innerHTML = "";
-        for (const msg of history) {
-          const div = document.createElement("div");
-          div.className = `msg ${msg.role}`;
-          let metaHtml = "";
-          if (msg.role === "user") {
-            metaHtml = `<div class="msg-meta"><span class="msg-time">${formatTime(new Date(msg.timestamp))}</span></div>`;
-          } else if (msg.meta && msg.meta.model) {
-            metaHtml = `<div class="msg-meta"><span class="msg-model">${escHtml(msg.meta.model)}</span><span class="msg-time">${formatTime(new Date(msg.timestamp))}</span></div>`;
-          }
-          div.innerHTML = `
-            <div class="msg-avatar">${msg.role === "user" ? "🧑" : "🤖"}</div>
-            <div class="msg-content">
-              ${metaHtml}
-              <div class="bubble">${msg.html}</div>
-            </div>`;
-          chat.appendChild(div);
-        }
+        renderHistoryMessages(history);
         const div = document.createElement("div");
         div.className = "msg agent";
         div.innerHTML = `<div class="msg-avatar">🤖</div><div class="msg-content"><div class="bubble" style="color:var(--text-muted)">📜 Chat restaurado. Continúa escribiendo...</div></div>`;
@@ -2012,8 +2077,19 @@
     });
   }
 
-  function clearChatHistory() {
-    localStorage.removeItem(CHAT_HISTORY_KEY);
+  function clearChatHistory(agent) {
+    if (agent) {
+      localStorage.removeItem(chatKey(agent));
+    } else {
+      // Sin argumento limpia solo el agente actual
+      localStorage.removeItem(chatKey());
+    }
+  }
+
+  function clearAllAgentHistories() {
+    for (const id of AGENT_IDS) {
+      localStorage.removeItem(chatKey(id));
+    }
   }
 
   // ── WS History ───────────────────────────────────────────────────────────────
@@ -2148,7 +2224,7 @@
     loadWorkspaceLabel();
     loadGitPanel();
     chat.innerHTML = "";
-    clearChatHistory();
+    clearAllAgentHistories();
     addMessage("agent", `✅ Workspace cambiado a <code>${escHtml(data.path)}</code>\nHistorial limpiado. ¿En qué puedo ayudarte?`);
 
     // Reconectar terminal al nuevo workspace si está inicializada
@@ -2543,7 +2619,7 @@
 
         } else if (event.type === "done") {
           document.getElementById("typing")?.remove();
-          addMessage("agent", renderMarkdown(event.content), { model: currentModel });
+          addMessage("agent", renderMarkdown(event.content), { model: currentModel, iterations: event.iterations, toolCalls: event.toolCalls });
           addDoneMeta(event.iterations, event.toolCalls);
           refreshStats();
           finish("done", true);  // solo aquí borramos localStorage
@@ -2615,7 +2691,7 @@
   async function clearHistory() {
     await fetch("/clear", { method: "POST" });
     chat.innerHTML = "";
-    clearChatHistory();
+    clearChatHistory(); // solo el agente actual
     addMessage("agent", "Historial limpiado. ¿En qué puedo ayudarte?");
     refreshStats();
   }
@@ -3272,8 +3348,15 @@
     } catch { /* se reintenta en el próximo refreshStats */ }
   }
 
+  function updateNoProviderBanner() {
+    const banner = document.getElementById("no-provider-banner");
+    const hasActive = allProviderConfigs.some(p => p.enabled !== false);
+    banner.style.display = hasActive ? "none" : "flex";
+  }
+
   function renderProviderList() {
     const pl = document.getElementById("provider-list");
+    updateNoProviderBanner();
     if (!allProviderConfigs.length) {
       pl.innerHTML = '<div style="text-align:center;padding:10px;color:var(--text-muted)">Sin proveedores. Haz clic en "+ Agregar".</div>';
       return;
@@ -3294,6 +3377,37 @@
     });
   }
 
+  function getPlatformTag(cfg) {
+    // Campo explícito tiene prioridad
+    const PROVIDER_MAP = {
+      groq:        { label: 'Groq',        cls: 'tag-groq' },
+      openrouter:  { label: 'OpenRouter',  cls: 'tag-openrouter' },
+      anthropic:   { label: 'Anthropic',   cls: 'tag-anthropic' },
+      openai:      { label: 'OpenAI',      cls: 'tag-openai' },
+      cerebras:    { label: 'Cerebras',    cls: 'tag-cerebras' },
+      huggingface: { label: 'HuggingFace', cls: 'tag-huggingface' },
+      mistral:     { label: 'Mistral',     cls: 'tag-mistral' },
+      local:       { label: 'Local',       cls: 'tag-local' },
+      vercel:      { label: 'Vercel',      cls: 'tag-vercel' },
+      cloudflare:  { label: 'Cloudflare',  cls: 'tag-cloudflare' },
+    };
+    if (cfg.provider && PROVIDER_MAP[cfg.provider]) return PROVIDER_MAP[cfg.provider];
+
+    // Fallback: detectar desde baseUrl
+    const url = (cfg.baseUrl || '').toLowerCase();
+    if (url.includes('groq.com'))              return { label: 'Groq',        cls: 'tag-groq' };
+    if (url.includes('openrouter.ai'))         return { label: 'OpenRouter',  cls: 'tag-openrouter' };
+    if (url.includes('anthropic.com'))         return { label: 'Anthropic',   cls: 'tag-anthropic' };
+    if (url.includes('cerebras.ai'))           return { label: 'Cerebras',    cls: 'tag-cerebras' };
+    if (url.includes('huggingface.co'))        return { label: 'HuggingFace', cls: 'tag-huggingface' };
+    if (url.includes('vercel.app'))            return { label: 'Vercel',      cls: 'tag-vercel' };
+    if (url.includes('cloudflare.com'))        return { label: 'Cloudflare',  cls: 'tag-cloudflare' };
+    if (url.includes('mistral.ai'))            return { label: 'Mistral',     cls: 'tag-mistral' };
+    if (url.includes('localhost') || url.includes('127.0.0.1')) return { label: 'Local', cls: 'tag-local' };
+    if (!url || url.includes('openai.com'))    return { label: 'OpenAI',      cls: 'tag-openai' };
+    return { label: 'Custom', cls: 'tag-unknown' };
+  }
+
   function renderProviderCard(cfg, i) {
     const isEnabled = cfg.enabled !== false;
     const rt        = runtimeProviderMap[i];
@@ -3308,12 +3422,16 @@
     const failures  = rt?.failures || 0;
     const remaining = (rt?.openUntilMs > Date.now()) ? Math.ceil((rt.openUntilMs - Date.now()) / 1000) : 0;
 
+    const hasKey = !!cfg.apiKey?.trim();
+    const pt = getPlatformTag(cfg);
     return `
       <div class="provider-item ${si.itemClass}${!isEnabled?' provider-item-disabled':''}" id="provider-item-${i}">
         <div class="provider-row1" onclick="toggleProviderExpand(${i})" style="cursor:pointer">
           <span class="provider-dot ${si.dotClass}"></span>
-          <span class="provider-name">#${i+1} ${escHtml(cfg.model||'—')}</span>
+          <span class="provider-platform-tag ${pt.cls}">${pt.label}</span>
+          <span class="provider-name" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escAttr(cfg.model||'—')}">${escHtml(cfg.model||'—')}</span>
           <span class="provider-status-badge ${si.badgeClass}">${si.badgeLabel}</span>
+          ${isEnabled && !hasKey ? `<span class="pcfg-key-indicator empty" title="Sin API key">Sin key</span>` : ''}
           <span class="provider-expand-arrow" id="pcfg-arrow-${i}">▶</span>
         </div>
         <div class="provider-row3">
@@ -3329,45 +3447,57 @@
             <select class="pcfg-input" style="cursor:pointer" onchange="applyProviderTemplate(${i}, this.value); this.value=''">
               <option value="">— Seleccionar plantilla —</option>
               <option value="openai">OpenAI</option>
-              <option value="groq">Groq</option>
-              <option value="openrouter">OpenRouter</option>
+              <option value="groq">Groq ⚡</option>
+              <option value="openrouter">OpenRouter 🧩</option>
               <option value="cerebras">Cerebras</option>
-              <option value="anthropic">Anthropic (Claude)</option>
+              <option value="huggingface">HuggingFace 🤗</option>
+              <option value="vercel">Vercel AI Gateway 🔺</option>
+              <option value="cloudflare">Cloudflare Workers AI 🏗</option>
+              <option value="anthropic">Anthropic via OpenRouter</option>
               <option value="ollama">Ollama (local)</option>
               <option value="mistral">Mistral</option>
             </select>
           </div>
           <div>
+            <div class="pcfg-label">🔑 API Key</div>
+            <div class="pcfg-key-row">
+              <input class="pcfg-input" type="text" id="pcfg-key-${i}"
+                placeholder="Pega tu API key aquí…"
+                value="${escHtml(cfg.apiKey||'')}"
+                oninput="allProviderConfigs[${i}].apiKey=this.value; updateKeyIndicator(${i})" />
+              <div class="pcfg-key-actions">
+                <button class="btn-sm" onclick="pasteKey(${i})" title="Pegar del portapapeles">📋</button>
+                <button class="btn-sm" onclick="clearKey(${i})" title="Limpiar key" style="color:var(--red)">✕</button>
+              </div>
+            </div>
+            <div id="pcfg-key-status-${i}" style="margin-top:3px;font-size:10px;color:${hasKey?'var(--green)':'var(--text-dim)'}">
+              ${hasKey ? `✓ Key configurada (${cfg.apiKey.slice(0,8)}…)` : 'Sin API key'}
+            </div>
+          </div>
+          <div>
             <div class="pcfg-label">Modelo</div>
-            <input class="pcfg-input" type="text" placeholder="gpt-4o, llama-3.3…" value="${escHtml(cfg.model||'')}"
-              oninput="allProviderConfigs[${i}].model=this.value; document.querySelector('#provider-item-${i} .provider-name').textContent='#${i+1} '+(this.value||'—')" />
+            <input class="pcfg-input" type="text" placeholder="gpt-4o, llama-3.3-70b-versatile…" value="${escHtml(cfg.model||'')}"
+              oninput="allProviderConfigs[${i}].model=this.value; document.querySelector('#provider-item-${i} .provider-name').textContent=(this.value||'—')" />
           </div>
           <div>
             <div class="pcfg-label">Base URL <span style="font-weight:400;text-transform:none">(vacío = OpenAI)</span></div>
             <input class="pcfg-input" type="text" placeholder="https://api.groq.com/openai/v1" value="${escHtml(cfg.baseUrl||'')}"
               oninput="allProviderConfigs[${i}].baseUrl=this.value; autoFillAnthropicHeaders(${i}, this.value)" />
           </div>
-          <div>
-            <div class="pcfg-label">API Key</div>
-            <div class="pcfg-key-row">
-              <input class="pcfg-input" type="password" id="pcfg-key-${i}" value="${escHtml(cfg.apiKey||'')}"
-                oninput="allProviderConfigs[${i}].apiKey=this.value" />
-              <button class="btn-sm" onclick="toggleCfgKey(${i})" style="padding:2px 6px;flex-shrink:0">👁</button>
-            </div>
-          </div>
           <details>
-            <summary class="pcfg-details-summary">Headers personalizados</summary>
-            <div style="margin-top:4px">
+            <summary class="pcfg-details-summary">⚙ Headers personalizados (avanzado)</summary>
+            <div style="margin-top:6px">
               <input class="pcfg-input" type="text" placeholder='{"anthropic-version":"2023-06-01"}' value="${escHtml(cfg.headers||'')}"
-                oninput="allProviderConfigs[${i}].headers=this.value" style="font-family:monospace;font-size:10px" />
+                oninput="allProviderConfigs[${i}].headers=this.value" style="font-family:monospace;font-size:11px" />
             </div>
           </details>
           <div class="pcfg-actions">
             <button class="btn-sm ${isEnabled?'provider-toggle-on':'provider-toggle-off'}" onclick="toggleProvider(${i})">${isEnabled?'✓ Activo':'⏸ Pausado'}</button>
             <button class="btn-sm" onclick="moveProvider(${i},-1)" ${i===0?'disabled':''}>↑</button>
             <button class="btn-sm" onclick="moveProvider(${i},1)" ${i===allProviderConfigs.length-1?'disabled':''}>↓</button>
-            <button class="btn-sm" style="color:var(--red);margin-left:auto" onclick="deleteProvider(${i})" title="Eliminar proveedor">✕</button>
+            <button class="btn-sm" style="color:var(--red);margin-left:auto" onclick="deleteProvider(${i})" title="Eliminar proveedor">🗑</button>
           </div>
+          <button class="pcfg-save-btn" id="pcfg-save-btn-${i}" onclick="saveProvider(${i})">💾 Guardar cambios</button>
         </div>
       </div>`;
   }
@@ -3391,6 +3521,65 @@
   function toggleCfgKey(i) {
     const inp = document.getElementById(`pcfg-key-${i}`);
     if (inp) inp.type = inp.type === "password" ? "text" : "password";
+  }
+
+  async function pasteKey(i) {
+    try {
+      const text = await navigator.clipboard.readText();
+      const inp = document.getElementById(`pcfg-key-${i}`);
+      if (!inp) return;
+      inp.value = text.trim();
+      allProviderConfigs[i].apiKey = text.trim();
+      updateKeyIndicator(i);
+    } catch {
+      alert("No se pudo acceder al portapapeles. Pega manualmente en el campo.");
+    }
+  }
+
+  function clearKey(i) {
+    const inp = document.getElementById(`pcfg-key-${i}`);
+    if (inp) inp.value = "";
+    allProviderConfigs[i].apiKey = "";
+    updateKeyIndicator(i);
+  }
+
+  function updateKeyIndicator(i) {
+    const key = allProviderConfigs[i].apiKey?.trim() || "";
+    const status = document.getElementById(`pcfg-key-status-${i}`);
+    const badge  = document.querySelector(`#provider-item-${i} .pcfg-key-indicator`);
+    if (status) {
+      status.style.color = key ? "var(--green)" : "var(--text-dim)";
+      status.textContent = key ? `✓ Key configurada (${key.slice(0,8)}…)` : "Sin API key";
+    }
+    if (badge) {
+      badge.style.display = key ? "none" : "";
+    }
+  }
+
+  async function saveProvider(i) {
+    const btn = document.getElementById(`pcfg-save-btn-${i}`);
+    if (btn) { btn.disabled = true; btn.textContent = "Guardando…"; }
+    try {
+      const r = await fetch("/providers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ providers: allProviderConfigs }),
+      }).then(x => x.json());
+      if (r.ok) {
+        if (btn) { btn.classList.add("saved"); btn.textContent = "✓ Guardado"; }
+        setTimeout(() => {
+          if (btn) { btn.disabled = false; btn.classList.remove("saved"); btn.textContent = "💾 Guardar cambios"; }
+        }, 2500);
+        updateNoProviderBanner();
+        refreshStats();
+      } else {
+        alert("Error al guardar:\n" + (r.error || "Desconocido"));
+        if (btn) { btn.disabled = false; btn.textContent = "💾 Guardar cambios"; }
+      }
+    } catch {
+      alert("Error de conexión al guardar.");
+      if (btn) { btn.disabled = false; btn.textContent = "💾 Guardar cambios"; }
+    }
   }
 
   // Calcula el índice en el registry (solo proveedores activos, 0-based)
@@ -3446,18 +3635,25 @@
   }
 
   const PROVIDER_TEMPLATES = {
-    groq:       { baseUrl: 'https://api.groq.com/openai/v1',      model: 'llama-3.3-70b-versatile',    headers: '' },
-    openrouter: { baseUrl: 'https://openrouter.ai/api/v1',         model: 'openai/gpt-4o',              headers: '{"HTTP-Referer":"https://github.com","X-OpenRouter-Title":"mcp-dev-agent"}' },
-    cerebras:   { baseUrl: 'https://api.cerebras.ai/v1',           model: 'qwen-3-235b-a22b-instruct-2507', headers: '' },
-    anthropic:  { baseUrl: 'https://api.anthropic.com/v1',         model: 'claude-sonnet-4-6',          headers: '{"anthropic-version":"2023-06-01","anthropic-beta":"tools-2024-04-04"}' },
-    ollama:     { baseUrl: 'http://localhost:11434/v1',             model: 'llama3',                     headers: '' },
-    mistral:    { baseUrl: 'https://api.mistral.ai/v1',             model: 'mistral-large-latest',       headers: '' },
-    openai:     { baseUrl: '',                                      model: 'gpt-4o',                     headers: '' },
+    groq:        { baseUrl: 'https://api.groq.com/openai/v1',                                model: 'llama-3.3-70b-versatile',           headers: '' },
+    openrouter:  { baseUrl: 'https://openrouter.ai/api/v1',                                  model: 'openai/gpt-4o',                     headers: '{"HTTP-Referer":"https://github.com","X-OpenRouter-Title":"mcp-dev-agent"}' },
+    cerebras:    { baseUrl: 'https://api.cerebras.ai/v1',                                    model: 'qwen-3-235b-a22b-instruct-2507',    headers: '' },
+    // Anthropic nativa NO es compatible con el SDK OpenAI — usa OpenRouter para acceder a Claude
+    anthropic:   { baseUrl: 'https://openrouter.ai/api/v1',                                  model: 'anthropic/claude-sonnet-4-6',       headers: '{"HTTP-Referer":"https://github.com","X-OpenRouter-Title":"mcp-dev-agent"}' },
+    huggingface: { baseUrl: 'https://api-inference.huggingface.co/v1',                       model: 'meta-llama/Llama-3.1-70B-Instruct', headers: '' },
+    // Vercel AI Gateway: reemplaza TEAM y PROJECT con los tuyos de vercel.com
+    vercel:      { baseUrl: 'https://gateway.ai.vercel.app/v1/TEAM/PROJECT/openai',          model: 'gpt-4o',                            headers: '' },
+    // Cloudflare Workers AI: reemplaza ACCOUNT_ID con el tuyo de dash.cloudflare.com
+    cloudflare:  { baseUrl: 'https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/ai/v1', model: '@cf/meta/llama-3.1-70b-instruct',  headers: '' },
+    ollama:      { baseUrl: 'http://localhost:11434/v1',                                      model: 'llama3',                            headers: '' },
+    mistral:     { baseUrl: 'https://api.mistral.ai/v1',                                     model: 'mistral-large-latest',              headers: '' },
+    openai:      { baseUrl: '',                                                               model: 'gpt-4o',                            headers: '' },
   };
 
   function applyProviderTemplate(i, tplKey) {
     if (!tplKey || !PROVIDER_TEMPLATES[tplKey]) return;
     const tpl = PROVIDER_TEMPLATES[tplKey];
+    allProviderConfigs[i].provider = tplKey === 'ollama' ? 'local' : tplKey;
     allProviderConfigs[i].baseUrl = tpl.baseUrl;
     allProviderConfigs[i].model   = tpl.model;
     if (tpl.headers) allProviderConfigs[i].headers = tpl.headers;
@@ -3488,16 +3684,20 @@
       alert('Has alcanzado el límite de 20 proveedores.');
       return;
     }
-    allProviderConfigs.push({ apiKey: "", model: "", baseUrl: "", headers: "", enabled: true });
+    allProviderConfigs.push({ apiKey: "", model: "", baseUrl: "", provider: "", headers: "", enabled: true });
     const newIdx = allProviderConfigs.length - 1;
-    expandedProviders.add(newIdx); // auto-expandir la nueva card
+    expandedProviders.add(newIdx);
     renderProviderList();
-    setTimeout(() => document.getElementById(`provider-item-${newIdx}`)?.scrollIntoView({ behavior: "smooth" }), 50);
+    setTimeout(() => {
+      document.getElementById(`provider-item-${newIdx}`)?.scrollIntoView({ behavior: "smooth" });
+      document.getElementById(`pcfg-key-${newIdx}`)?.focus();
+    }, 80);
   }
 
-  function toggleProvider(i) {
+  async function toggleProvider(i) {
     allProviderConfigs[i].enabled = allProviderConfigs[i].enabled === false;
     renderProviderList();
+    await saveProviders();
   }
 
   function deleteProvider(i) {

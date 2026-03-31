@@ -7,7 +7,7 @@
 import { EventEmitter } from "events";
 import fs from "fs/promises";
 import path from "path";
-import { ProviderRegistry } from "../providers/registry.js";
+import { ProviderRegistry, isReasoningModel } from "../providers/registry.js";
 import { logger } from "../utils/logger.js";
 import { config } from "../config/index.js";
 import { getWorkspaceDir } from "../utils/security.js";
@@ -190,6 +190,8 @@ export class DevAgent {
     this.conversationHistory.push({ role: "user", content: userMessage });
     this.iterationCount = 0;
     let trimRetries = 0;
+    let emptyRetries = 0;
+    const MAX_EMPTY_RETRIES = 2;
     const tools = this.mcpClient.getTools();
 
     while (this.iterationCount < config.maxIterations) {
@@ -211,14 +213,50 @@ export class DevAgent {
           });
           continue;
         }
-        if (llmErr.isContextTooLarge || (llmErr as { allFailed?: boolean }).allFailed) {
+        if ((llmErr as { allFailed?: boolean }).allFailed && !llmErr.isContextTooLarge) {
+          // Todos los proveedores fallaron (rate limit, sin créditos, etc.) — no tiene sentido reintentar
+          const failed = (llmErr as { failedProviders?: { name: string; reason: string; code?: number }[] }).failedProviders ?? [];
+          let msg = "**No se pudo conectar con ningún modelo de IA.**\n\n";
+          if (failed.length > 0) {
+            msg += "**Modelos intentados:**\n";
+            const causeEmoji: Record<string, string> = {
+              "rate limit":              "🚦",
+              "sin créditos":            "💳",
+              "modelo no encontrado":    "❓",
+              "error de red":            "🔌",
+              "servicio no disponible":  "🔴",
+              "circuit breaker abierto": "⛔",
+              "bad gateway":             "🌐",
+              "error interno":           "💥",
+              "contexto grande":         "📄",
+            };
+            for (const p of failed) {
+              const emoji = causeEmoji[p.reason] ?? "⚠️";
+              const code  = p.code ? ` (${p.code})` : "";
+              msg += `${emoji} **${p.name}** — ${p.reason}${code}\n`;
+            }
+            msg += "\n";
+            const reasons = new Set(failed.map(p => p.reason));
+            if (reasons.has("rate limit"))             msg += "💡 **Rate limit:** espera 1-2 minutos o activa otro modelo en el panel lateral.\n";
+            if (reasons.has("sin créditos"))           msg += "💡 **Sin créditos:** recarga tu cuenta o usa un proveedor diferente.\n";
+            if (reasons.has("error de red"))           msg += "💡 **Error de red:** verifica tu conexión o que el servidor local esté activo.\n";
+            if (reasons.has("circuit breaker abierto")) msg += "💡 **Circuit breaker:** el modelo falló demasiadas veces. Se reintentará automáticamente en unos minutos.\n";
+            if (reasons.has("modelo no encontrado"))   msg += "💡 **Modelo no encontrado:** verifica el nombre del modelo en el panel de proveedores.\n";
+          } else {
+            msg += "Revisa tu configuración en el panel lateral (☰ → Proveedores LLM).";
+          }
+          logger.warn(msg);
+          this.events.emit("done", { content: msg, iterations: this.iterationCount, toolCalls: this.totalToolCalls });
+          return msg;
+        }
+        if (llmErr.isContextTooLarge) {
           trimRetries++;
           if (trimRetries > MAX_TRIM_RETRIES) {
             logger.warn(`Hard-reset del historial tras ${trimRetries} intentos fallidos.`);
             this.conversationHistory = [{ role: "user", content: userMessage }];
             trimRetries = 0;
           } else {
-            logger.warn(`Contexto demasiado grande o todos los proveedores fallaron, recortando historial (${trimRetries}/${MAX_TRIM_RETRIES})...`);
+            logger.warn(`Contexto demasiado grande, recortando historial (${trimRetries}/${MAX_TRIM_RETRIES})...`);
             this.trimHistory();
           }
           continue;
@@ -231,13 +269,21 @@ export class DevAgent {
 
       if (!message.tool_calls || message.tool_calls.length === 0) {
         if (!message.content || message.content.trim() === "") {
-          logger.warn("El modelo terminó sin contenido — solicitando resumen explícito.");
+          emptyRetries++;
+          if (emptyRetries > MAX_EMPTY_RETRIES) {
+            const fallback = "No pude generar una respuesta. Intenta reformular tu mensaje.";
+            logger.warn(`El modelo devolvió contenido vacío ${emptyRetries} veces — abortando.`);
+            this.events.emit("done", { content: fallback, iterations: this.iterationCount, toolCalls: this.totalToolCalls });
+            return fallback;
+          }
+          logger.warn(`El modelo terminó sin contenido (${emptyRetries}/${MAX_EMPTY_RETRIES}) — solicitando resumen explícito.`);
           this.conversationHistory.push({
             role: "user",
             content: "Por favor, proporciona una respuesta completa con los resultados de tu análisis o los cambios realizados.",
           });
           continue;
         }
+        emptyRetries = 0;
         logger.divider("RESPUESTA FINAL");
         logger.agent(message.content);
         logger.info(`✅ Completado en ${this.iterationCount} iteraciones, ${this.totalToolCalls} tool calls.`);
@@ -295,9 +341,11 @@ export class DevAgent {
       ]);
 
       // Los modelos o-series (o1, o3, o4-mini, etc.) no aceptan temperature ni parallel_tool_calls
-      const isOSeries = /^o\d/i.test(provider.model);
+      const isOSeries   = /^o\d/i.test(provider.model);
       // Los modelos Claude (via endpoint OpenAI-compatible de Anthropic) no aceptan parallel_tool_calls
-      const isClaude  = provider.model.startsWith("claude-");
+      const isClaude    = provider.model.startsWith("claude-");
+      // Modelos de razonamiento (Groq qwen3, gpt-oss, etc.) requieren max_completion_tokens
+      const isReasoning = isReasoningModel(provider.model);
 
       try {
         const response = await provider.client.chat.completions.create({
@@ -307,7 +355,7 @@ export class DevAgent {
           tool_choice: "auto",
           ...(!isOSeries && !isClaude && { parallel_tool_calls: false }),
           ...(!isOSeries && { temperature: 0.1 }),
-          ...(isOSeries
+          ...(isReasoning
             ? { max_completion_tokens: 4096 }
             : { max_tokens: 4096 }),
         });
@@ -431,24 +479,51 @@ export class DevAgent {
   }
 
   private trimHistory(): void {
-    if (this.conversationHistory.length <= config.maxHistoryMsgs) return;
+    const before = this.conversationHistory.length;
 
-    const keep = Math.floor(config.maxHistoryMsgs / 2);
-    const head = this.conversationHistory.slice(0, 1);
-    let tailStart = this.conversationHistory.length - keep;
+    if (this.conversationHistory.length > config.maxHistoryMsgs) {
+      // Trim por cantidad: mantener la primera pregunta + la mitad más reciente
+      const keep     = Math.floor(config.maxHistoryMsgs / 2);
+      const head     = this.conversationHistory.slice(0, 1);
+      let tailStart  = this.conversationHistory.length - keep;
 
-    while (tailStart < this.conversationHistory.length) {
-      const msg = this.conversationHistory[tailStart];
-      const isClean =
-        msg.role === "user" ||
-        (msg.role === "assistant" && (!msg.tool_calls || msg.tool_calls.length === 0));
-      if (isClean) break;
-      tailStart++;
+      // Avanzar hasta un mensaje "limpio" para no cortar en medio de un tool call
+      while (tailStart < this.conversationHistory.length) {
+        const msg = this.conversationHistory[tailStart];
+        const isClean =
+          msg.role === "user" ||
+          (msg.role === "assistant" && (!msg.tool_calls || msg.tool_calls.length === 0));
+        if (isClean) break;
+        tailStart++;
+      }
+
+      this.conversationHistory = [...head, ...this.conversationHistory.slice(tailStart)];
+    } else if (this.conversationHistory.length > 2) {
+      // Pocos mensajes pero el contexto es demasiado grande (mensajes muy pesados).
+      // Eliminar el turno más antiguo (índice 1 + sus tool results asociados).
+      let i = 1;
+      // Si el índice 1 es un assistant con tool_calls, también eliminar sus tool results
+      const pivot = this.conversationHistory[1];
+      let deleteCount = 1;
+      if (pivot?.role === "assistant" && pivot.tool_calls?.length) {
+        const ids = new Set(pivot.tool_calls.map(tc => tc.id));
+        let j = 2;
+        while (j < this.conversationHistory.length && this.conversationHistory[j].role === "tool" && ids.has(this.conversationHistory[j].tool_call_id ?? "")) {
+          j++;
+        }
+        deleteCount = j - i;
+      }
+      this.conversationHistory.splice(i, deleteCount);
+    } else {
+      // Último recurso: truncar el contenido de los mensajes grandes
+      for (const msg of this.conversationHistory) {
+        if (msg.content && msg.content.length > 3000) {
+          msg.content = msg.content.substring(0, 3000) + "\n...[truncado por contexto]";
+        }
+      }
     }
 
-    const tail = this.conversationHistory.slice(tailStart);
-    this.conversationHistory = [...head, ...tail];
-    logger.warn(`Historial recortado a ${this.conversationHistory.length} mensajes.`);
+    logger.warn(`Historial recortado: ${before} → ${this.conversationHistory.length} mensajes.`);
   }
 
   clearHistory(): void {
@@ -472,6 +547,10 @@ export class DevAgent {
 
   async testProvider(index: number): Promise<{ ok: boolean; latencyMs?: number; error?: string; errorCode?: number }> {
     return this.registry.testProvider(index);
+  }
+
+  hasProviders(): boolean {
+    return this.registry.hasProviders();
   }
 
   /** Recarga los proveedores desde process.env sin reiniciar el servidor. */

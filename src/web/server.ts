@@ -7,6 +7,7 @@ import "dotenv/config";
 import express, { type Request, type Response } from "express";
 import path from "path";
 import fs from "fs/promises";
+import { watch as fsWatch } from "fs";
 import { fileURLToPath } from "url";
 import { exec } from "child_process";
 import { promisify } from "util";
@@ -136,6 +137,24 @@ async function initAgent(): Promise<void> {
   logger.info(`Web UI lista en http://localhost:${config.webPort}`);
 }
 
+function watchProviders(): void {
+  let debounce: ReturnType<typeof setTimeout> | null = null;
+  fsWatch(PROVIDERS_FILE, () => {
+    if (debounce) clearTimeout(debounce);
+    debounce = setTimeout(() => {
+      try {
+        devAgent?.reloadProviders();
+        testAgent?.reloadProviders();
+        codeReviewAgent?.reloadProviders();
+        logger.info("providers.json cambió en disco — registry recargado automáticamente.");
+      } catch (err) {
+        logger.warn("providers.json cambió pero no se pudo recargar:", (err as Error).message);
+      }
+    }, 300);
+  });
+  logger.info("Vigilando providers.json para recarga automática.");
+}
+
 // ─── Express app ──────────────────────────────────────────────────────────────
 
 const app = express();
@@ -184,6 +203,7 @@ app.post("/providers", async (req: Request<object, object, { providers: Provider
       return res.status(400).json({ ok: false, error: "providers debe ser un array" });
     }
     for (const p of providers) {
+      if (p.enabled === false) continue;
       if (!p.apiKey?.trim()) return res.status(400).json({ ok: false, error: "Todos los proveedores necesitan API key" });
       if (!p.model?.trim())  return res.status(400).json({ ok: false, error: "Todos los proveedores necesitan modelo" });
     }
@@ -538,6 +558,9 @@ app.post("/chat", (req: Request<object, object, ChatBody>, res: Response) => {
   if (!currentAgent) {
     return res.status(400).json({ error: "Agente no disponible" });
   }
+  if (!currentAgent.hasProviders()) {
+    return res.status(503).json({ error: "Sin proveedores activos. Activa al menos un modelo desde el panel lateral (☰ → Proveedores LLM)." });
+  }
 
   // Usar jobId del cliente si es válido y no está en uso
   const jobId = (clientJobId && typeof clientJobId === "string" && !jobStore.has(clientJobId))
@@ -719,12 +742,16 @@ process.on("SIGINT", async () => {
 });
 
 initAgent()
-  .then(() =>
+  .then(() => {
+    watchProviders();
     httpServer.listen(config.webPort, () => {
       console.log(`\n🌐  Abre tu navegador en http://localhost:${config.webPort}\n`);
-    })
-  )
+    });
+  })
   .catch((err: Error) => {
     logger.error("Error iniciando el servidor web:", err.message);
-    process.exit(1);
+    // Solo salir si es un error crítico (no relacionado con proveedores)
+    if (!err.message.includes("proveedores")) {
+      process.exit(1);
+    }
   });

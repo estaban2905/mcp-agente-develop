@@ -296,6 +296,14 @@ export class TestAgent {
     this.conversationHistory = [...head, ...tail];
   }
 
+  hasProviders(): boolean {
+    return this.registry.hasProviders();
+  }
+
+  reloadProviders(): void {
+    this.registry.reload();
+  }
+
   clearHistory(): void {
     this.conversationHistory = [];
     this.iterationCount = 0;
