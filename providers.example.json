@@ -1,0 +1,73 @@
+[
+  {
+    "apiKey": "gsk_YOUR_GROQ_API_KEY",
+    "model": "llama-3.3-70b-versatile",
+    "baseUrl": "https://api.groq.com/openai/v1",
+    "provider": "groq",
+    "enabled": true
+  },
+  {
+    "apiKey": "gsk_YOUR_GROQ_API_KEY_2",
+    "model": "llama-3.1-8b-instant",
+    "baseUrl": "https://api.groq.com/openai/v1",
+    "provider": "groq",
+    "enabled": false,
+    "contextWindow": 131072
+  },
+  {
+    "apiKey": "csk-YOUR_CEREBRAS_API_KEY",
+    "model": "qwen-3-235b-a22b-instruct-2507",
+    "baseUrl": "https://api.cerebras.ai/v1",
+    "provider": "cerebras",
+    "enabled": false
+  },
+  {
+    "apiKey": "sk-proj-YOUR_OPENAI_API_KEY",
+    "model": "gpt-4.1",
+    "provider": "openai",
+    "enabled": false
+  },
+  {
+    "apiKey": "sk-proj-YOUR_OPENAI_API_KEY",
+    "model": "gpt-4.1-mini",
+    "provider": "openai",
+    "enabled": false
+  },
+  {
+    "apiKey": "sk-proj-YOUR_OPENAI_API_KEY",
+    "model": "o4-mini",
+    "provider": "openai",
+    "enabled": false
+  },
+  {
+    "apiKey": "ollama",
+    "model": "qwen2.5-coder:7b",
+    "baseUrl": "http://localhost:11434/v1",
+    "provider": "ollama",
+    "enabled": false
+  },
+  {
+    "apiKey": "sk-ant-api03-YOUR_ANTHROPIC_API_KEY",
+    "model": "claude-sonnet-4-6",
+    "baseUrl": "https://api.anthropic.com/v1",
+    "provider": "anthropic",
+    "headers": "{\"anthropic-version\":\"2023-06-01\",\"anthropic-beta\":\"tools-2024-04-04\"}",
+    "enabled": false
+  },
+  {
+    "apiKey": "sk-or-v1-YOUR_OPENROUTER_API_KEY",
+    "model": "google/gemini-2.0-flash-001",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "provider": "openrouter",
+    "headers": "{\"HTTP-Referer\":\"https://github.com\",\"X-OpenRouter-Title\":\"mcp-dev-agent\"}",
+    "enabled": false
+  },
+  {
+    "apiKey": "sk-or-v1-YOUR_OPENROUTER_API_KEY",
+    "model": "openai/gpt-4o",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "provider": "openrouter",
+    "headers": "{\"HTTP-Referer\":\"https://github.com\",\"X-OpenRouter-Title\":\"mcp-dev-agent\"}",
+    "enabled": false
+  }
+]

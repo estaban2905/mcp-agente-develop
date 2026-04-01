@@ -1,68 +1,109 @@
 // =============================================
-//   Logger utility con niveles y colores
+//   Logger — Winston (consola + archivo)
 // =============================================
 
-import chalk from "chalk";
+import winston from "winston";
+import path from "path";
+import fs from "fs";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
-const LEVELS: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 };
+// Asegurar que exista el directorio de logs
+const LOGS_DIR = path.resolve(process.cwd(), "logs");
+try { fs.mkdirSync(LOGS_DIR, { recursive: true }); } catch { /* ya existe */ }
 
-const currentLevel: number = LEVELS[(process.env.LOG_LEVEL as LogLevel) ?? "info"] ?? 1;
+// Colores para consola
+const COLORS: Record<string, string> = {
+  debug: "\x1b[90m",  // gris
+  info:  "\x1b[36m",  // cyan
+  warn:  "\x1b[33m",  // amarillo
+  error: "\x1b[31m",  // rojo
+  RESET: "\x1b[0m",
+};
 
-function timestamp(): string {
-  return new Date().toISOString().replace("T", " ").split(".")[0];
-}
+const consoleFormat = winston.format.printf(({ level, message, timestamp, ...meta }) => {
+  const color = COLORS[level] ?? "";
+  const reset = COLORS.RESET;
+  const label = level.toUpperCase().padEnd(5);
+  const extra = Object.keys(meta).length ? " " + JSON.stringify(meta) : "";
+  return `${color}[${timestamp}] [${label}] ${message}${extra}${reset}`;
+});
 
-function shouldLog(level: LogLevel): boolean {
-  return LEVELS[level] >= currentLevel;
-}
+const fileFormat = winston.format.printf(({ level, message, timestamp, ...meta }) => {
+  const extra = Object.keys(meta).length ? " " + JSON.stringify(meta) : "";
+  return `[${timestamp}] [${level.toUpperCase().padEnd(5)}] ${message}${extra}`;
+});
+
+const winstonLogger = winston.createLogger({
+  level: (process.env.LOG_LEVEL as LogLevel) ?? "info",
+  transports: [
+    // Consola — igual que antes (stderr para no mezclar con stdout del agente)
+    new winston.transports.Console({
+      stderrLevels: ["debug", "info", "warn", "error"],
+      format: winston.format.combine(
+        winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+        consoleFormat
+      ),
+    }),
+    // Archivo rotativo diario — info+
+    new winston.transports.File({
+      filename: path.join(LOGS_DIR, "app.log"),
+      maxsize: 10 * 1024 * 1024,   // 10 MB por archivo
+      maxFiles: 5,
+      tailable: true,
+      format: winston.format.combine(
+        winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+        fileFormat
+      ),
+    }),
+    // Archivo separado solo para errores
+    new winston.transports.File({
+      filename: path.join(LOGS_DIR, "error.log"),
+      level: "error",
+      maxsize: 5 * 1024 * 1024,
+      maxFiles: 3,
+      tailable: true,
+      format: winston.format.combine(
+        winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+        fileFormat
+      ),
+    }),
+  ],
+});
 
 export const logger = {
   debug(msg: string, ...args: unknown[]): void {
-    if (!shouldLog("debug")) return;
-    console.error(chalk.gray(`[${timestamp()}] [DEBUG] ${msg}`), ...args);
+    winstonLogger.debug(msg, ...args);
   },
 
   info(msg: string, ...args: unknown[]): void {
-    if (!shouldLog("info")) return;
-    console.error(chalk.cyan(`[${timestamp()}] [INFO]  ${msg}`), ...args);
+    winstonLogger.info(msg, ...args);
   },
 
   success(msg: string, ...args: unknown[]): void {
-    if (!shouldLog("info")) return;
-    console.error(chalk.green(`[${timestamp()}] [OK]    ${msg}`), ...args);
+    winstonLogger.info(`[OK] ${msg}`, ...args);
   },
 
   warn(msg: string, ...args: unknown[]): void {
-    if (!shouldLog("warn")) return;
-    console.warn(chalk.yellow(`[${timestamp()}] [WARN]  ${msg}`), ...args);
+    winstonLogger.warn(msg, ...args);
   },
 
   error(msg: string, ...args: unknown[]): void {
-    if (!shouldLog("error")) return;
-    console.error(chalk.red(`[${timestamp()}] [ERROR] ${msg}`), ...args);
+    winstonLogger.error(msg, ...args);
   },
 
   agent(msg: string, ...args: unknown[]): void {
-    console.error(chalk.magenta(`\n[${timestamp()}] [AGENT] `) + chalk.white(msg), ...args);
+    winstonLogger.info(`[AGENT] ${msg}`, ...args);
   },
 
   tool(name: string, msg: string, ...args: unknown[]): void {
-    console.error(
-      chalk.blue(`[${timestamp()}] [TOOL]  `) +
-        chalk.bold.blue(`${name}`) +
-        chalk.white(` → ${msg}`),
-      ...args
-    );
+    winstonLogger.info(`[TOOL] ${name} → ${msg}`, ...args);
   },
 
   divider(label = ""): void {
-    if (label) {
-      const pad = Math.floor((60 - label.length - 2) / 2);
-      console.error(chalk.gray(`${"─".repeat(pad)} ${label} ${"─".repeat(pad)}`));
-    } else {
-      console.error(chalk.gray("─".repeat(60)));
-    }
+    const line = label
+      ? `${"─".repeat(20)} ${label} ${"─".repeat(20)}`
+      : "─".repeat(60);
+    winstonLogger.info(line);
   },
 };

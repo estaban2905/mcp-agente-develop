@@ -131,6 +131,42 @@ const PARAM_ALIASES: Record<string, Record<string, string>> = {
   list_directory: { dir: "path", directory: "path", folder: "path" },
 };
 
+/**
+ * Detecta si el content de un mensaje es en realidad un tool call en texto plano
+ * (patrón común en modelos locales como qwen2.5-coder vía Ollama que no implementan
+ * correctamente la API de function calling).
+ * Soporta: {"name":"...","arguments":{...}} y {"name":"...","parameters":{...}}
+ * así como arrays de tool calls.
+ */
+function tryParseToolCallFromContent(content: string, tools: OpenAITool[]): ToolCall[] | null {
+  const trimmed = content.trim();
+  // Extraer JSON del content (puede venir envuelto en ```json ... ```)
+  const jsonMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/) ?? [null, trimmed];
+  const raw = (jsonMatch[1] ?? trimmed).trim();
+
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { return null; }
+
+  const candidates: unknown[] = Array.isArray(parsed) ? parsed : [parsed];
+  const toolNames = new Set(tools.map(t => t.function.name));
+
+  const calls: ToolCall[] = [];
+  for (const item of candidates) {
+    if (typeof item !== "object" || item === null) return null;
+    const obj = item as Record<string, unknown>;
+    const name = typeof obj.name === "string" ? obj.name : null;
+    if (!name || !toolNames.has(name)) return null;
+    const args = obj.arguments ?? obj.parameters ?? {};
+    calls.push({
+      id:       `toolcall-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      type:     "function",
+      function: { name, arguments: typeof args === "string" ? args : JSON.stringify(args) },
+    });
+  }
+
+  return calls.length > 0 ? calls : null;
+}
+
 function normalizeArgs(
   toolName: string,
   args: Record<string, unknown>
@@ -265,6 +301,17 @@ export class DevAgent {
       }
 
       const message = response.choices[0].message as ChatMessage;
+
+      // Algunos modelos locales (ej. qwen2.5-coder vía Ollama) no devuelven tool_calls
+      // estructurados sino JSON en el content. Lo detectamos y lo convertimos.
+      if ((!message.tool_calls || message.tool_calls.length === 0) && message.content) {
+        const parsed = tryParseToolCallFromContent(message.content, tools);
+        if (parsed) {
+          message.tool_calls = parsed;
+          message.content    = null;
+        }
+      }
+
       this.conversationHistory.push(message);
 
       if (!message.tool_calls || message.tool_calls.length === 0) {

@@ -16,7 +16,7 @@ function getEnvString(key: string, defaultValue: string): string {
 export const config = {
   maxIterations:    getEnvInt("MAX_ITERATIONS",   30),
   maxResultChars:   getEnvInt("MAX_RESULT_CHARS",  6000),
-  maxHistoryMsgs:   getEnvInt("MAX_HISTORY_MSGS",  8),
+  maxHistoryMsgs:   getEnvInt("MAX_HISTORY_MSGS",  30),
   commandTimeout:   getEnvInt("COMMAND_TIMEOUT",   30000),
   circuitThreshold: getEnvInt("CIRCUIT_THRESHOLD", 3),
   circuitResetMs:   getEnvInt("CIRCUIT_RESET_MS",  60000),

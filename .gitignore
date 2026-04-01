@@ -54,6 +54,9 @@ desktop.ini
 prisma/dev.db
 prisma/dev.db-journal
 
+# Providers config (contains API keys — use providers.example.json as template)
+providers.json
+
 # Package managers
 .npm
 .yarn/cache

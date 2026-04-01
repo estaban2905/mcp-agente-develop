@@ -2225,7 +2225,10 @@
     loadGitPanel();
     chat.innerHTML = "";
     clearAllAgentHistories();
-    addMessage("agent", `✅ Workspace cambiado a <code>${escHtml(data.path)}</code>\nHistorial limpiado. ¿En qué puedo ayudarte?`);
+    const gitNote = data.isGitRepo === false
+      ? "\n⚠️ Este directorio no tiene repositorio git. Puedes inicializarlo desde la pestaña Git."
+      : "";
+    addMessage("agent", `✅ Workspace cambiado a <code>${escHtml(data.path)}</code>\nHistorial limpiado. ¿En qué puedo ayudarte?${gitNote}`);
 
     // Reconectar terminal al nuevo workspace si está inicializada
     if (term) {
@@ -3841,6 +3844,11 @@
 
     termWs.onopen = () => {
       dot.classList.add("connected");
+      // Sincronizar dimensiones reales al conectar
+      if (term && fitAddon) {
+        fitAddon.fit();
+        termWs.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
+      }
       fetch("/workspace").then(r => r.json()).then(d => {
         document.getElementById("terminal-cwd").textContent = d.path || "";
       }).catch(() => {});

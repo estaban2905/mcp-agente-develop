@@ -5,12 +5,15 @@
 
 import "dotenv/config";
 import express, { type Request, type Response } from "express";
+import rateLimit from "express-rate-limit";
 import path from "path";
 import fs from "fs/promises";
 import { watch as fsWatch } from "fs";
 import { fileURLToPath } from "url";
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
+
+const execFileAsync = promisify(execFile);
 import { createServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import * as pty from "node-pty";
@@ -21,6 +24,8 @@ import { TestAgent, CodeReviewAgent } from "../agents/index.js";
 import { logger } from "../utils/logger.js";
 import { getWorkspaceDir } from "../utils/security.js";
 import { config } from "../config/index.js";
+import { jobStore } from "../utils/job-store.js";
+import type { PersistedJob, JobListener } from "../utils/job-store.js";
 import type {
   GitPanelResult,
   GitInfoResponse,
@@ -42,7 +47,6 @@ import type {
 const NOTES_FILE     = ".agent-notes.md";
 const PROVIDERS_FILE = path.resolve(process.cwd(), "providers.json");
 
-const execAsync = promisify(exec);
 
 // ─── Provider config types & helpers ─────────────────────────────────────────
 
@@ -67,10 +71,10 @@ async function writeJsonProviders(providers: ProviderConfigRaw[]): Promise<void>
   await fs.writeFile(PROVIDERS_FILE, JSON.stringify(providers, null, 2), "utf-8");
 }
 
-async function gitExecPanel(args: string): Promise<GitPanelResult> {
+async function gitExecPanel(args: string[]): Promise<GitPanelResult> {
   const cwd = getWorkspaceDir();
   try {
-    const { stdout } = await execAsync(`git ${args}`, { cwd, timeout: 10000 });
+    const { stdout } = await execFileAsync("git", args, { cwd, timeout: 10000 });
     return { ok: true, out: stdout };
   } catch (err) {
     const error = err as { stderr?: string; message: string };
@@ -99,34 +103,8 @@ const pendingConfirms = new Map<string, (approved: boolean) => void>();
 
 // ─── Job Store ────────────────────────────────────────────────────────────────
 
-type JobListener = (data: object, idx: number) => void;
-
-interface Job {
-  status: "running" | "done" | "error";
-  events: object[];
-  listeners: Set<JobListener>;
-  createdAt: number;
-}
-
-const jobStore = new Map<string, Job>();
-
 function generateJobId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-}
-
-function emitJobEvent(job: Job, data: object): void {
-  const idx = job.events.length;
-  job.events.push(data);
-  for (const listener of job.listeners) {
-    listener(data, idx);
-  }
-}
-
-function closeJobListeners(job: Job): void {
-  for (const listener of job.listeners) {
-    listener({ type: "_close" }, -1);
-  }
-  job.listeners.clear();
 }
 
 async function initAgent(): Promise<void> {
@@ -159,6 +137,12 @@ function watchProviders(): void {
 
 const app = express();
 app.use(express.json());
+
+// Rate limiting: max 60 req/min general, 20/min en /chat
+const generalLimiter = rateLimit({ windowMs: 60_000, max: 60, standardHeaders: true, legacyHeaders: false });
+const chatLimiter    = rateLimit({ windowMs: 60_000, max: 20, standardHeaders: true, legacyHeaders: false, message: { error: "Demasiadas peticiones. Espera un momento." } });
+app.use(generalLimiter);
+app.use("/chat", chatLimiter);
 
 app.get("/", (_req: Request, res: Response) => {
   res.sendFile(path.join(__dirname, "index.html"));
@@ -272,17 +256,18 @@ app.post("/workspace", async (req: Request<object, object, WorkspaceBody>, res: 
     return res.status(400).json({ ok: false, error: `Directorio no existe: ${resolved}` });
   }
 
-  // Validar git en el NUEVO path, no en el actual
+  // Detectar si el directorio tiene git (sin bloquear — se puede inicializar desde el panel git)
+  let isGitRepo = true;
   try {
-    const { stdout } = await execAsync("git status --porcelain", { cwd: resolved, timeout: 10000 });
+    const { stdout } = await execFileAsync("git", ["status", "--porcelain"], { cwd: resolved, timeout: 10000 });
     const out = stdout.toLowerCase();
     if (out.includes("not a git repository") || out.includes("fatal:") || out.includes("no es un repositorio git")) {
-      return res.status(400).json({ ok: false, error: `No es un repositorio git: ${resolved}` });
+      isGitRepo = false;
     }
   } catch (err) {
     const errMsg = ((err as { stderr?: string; message?: string }).stderr ?? (err as Error).message ?? "").toLowerCase();
     if (errMsg.includes("not a git repository") || errMsg.includes("fatal:") || errMsg.includes("no es un repositorio git")) {
-      return res.status(400).json({ ok: false, error: `No es un repositorio git: ${resolved}` });
+      isGitRepo = false;
     }
     // Si el error es otro (ej: git no instalado), lo ignoramos y continuamos
   }
@@ -301,7 +286,7 @@ app.post("/workspace", async (req: Request<object, object, WorkspaceBody>, res: 
   }
 
   logger.info(`Workspace cambiado a: ${resolved}`);
-  return res.json({ ok: true, path: resolved });
+  return res.json({ ok: true, path: resolved, isGitRepo });
 });
 
 // ─── Git Panel Endpoints ──────────────────────────────────────────────────────
@@ -310,8 +295,8 @@ app.get("/git/info", async (_req: Request, res: Response) => {
   try {
     const workspaceDir = getWorkspaceDir();
     const project = path.basename(workspaceDir);
-    const { out: branch }    = await gitExecPanel("branch --show-current");
-    const { out: porcelain } = await gitExecPanel("status --porcelain");
+    const { out: branch }    = await gitExecPanel(["branch", "--show-current"]);
+    const { out: porcelain } = await gitExecPanel(["status", "--porcelain"]);
 
     const staged: GitFileEntry[]    = [];
     const unstaged: GitFileEntry[]  = [];
@@ -357,10 +342,8 @@ app.get("/git/info", async (_req: Request, res: Response) => {
 app.post("/git/add", async (req: Request<object, object, GitAddBody>, res: Response) => {
   try {
     const { files = "." } = req.body;
-    const fileList = Array.isArray(files)
-      ? files.map((f) => `"${f.replace(/"/g, '\\"')}"`).join(" ")
-      : `"${String(files).replace(/"/g, '\\"')}"`;
-    const result = await gitExecPanel(`add ${fileList}`);
+    const fileArgs = Array.isArray(files) ? files : [String(files)];
+    const result = await gitExecPanel(["add", "--", ...fileArgs]);
     res.json(result);
   } catch (err) {
     res.status(500).json({ ok: false, out: (err as Error).message });
@@ -370,11 +353,11 @@ app.post("/git/add", async (req: Request<object, object, GitAddBody>, res: Respo
 app.post("/git/restore", async (req: Request<object, object, GitRestoreBody>, res: Response) => {
   try {
     const { files = ".", staged = false } = req.body;
-    const fileList = Array.isArray(files)
-      ? files.map((f) => `"${f.replace(/"/g, '\\"')}"`).join(" ")
-      : `"${String(files).replace(/"/g, '\\"')}"`;
-    const flag   = staged ? "--staged " : "";
-    const result = await gitExecPanel(`restore ${flag}${fileList}`);
+    const fileArgs = Array.isArray(files) ? files : [String(files)];
+    const args = staged
+      ? ["restore", "--staged", "--", ...fileArgs]
+      : ["restore", "--", ...fileArgs];
+    const result = await gitExecPanel(args);
     res.json(result);
   } catch (err) {
     res.status(500).json({ ok: false, out: (err as Error).message });
@@ -422,9 +405,9 @@ app.post("/git/commit", async (req: Request<object, object, GitCommitBody>, res:
     if (!message?.trim()) {
       return res.status(400).json({ ok: false, out: "Mensaje requerido" });
     }
-    await gitExecPanel('config user.email "agent@mcp-dev-agent.local"');
-    await gitExecPanel('config user.name "MCP Dev Agent"');
-    const result = await gitExecPanel(`commit -m "${message.replace(/"/g, '\\"')}"`);
+    await gitExecPanel(["config", "user.email", "agent@mcp-dev-agent.local"]);
+    await gitExecPanel(["config", "user.name", "MCP Dev Agent"]);
+    const result = await gitExecPanel(["commit", "-m", message]);
     return res.json(result);
   } catch (err) {
     return res.status(500).json({ ok: false, out: (err as Error).message });
@@ -433,7 +416,7 @@ app.post("/git/commit", async (req: Request<object, object, GitCommitBody>, res:
 
 app.get("/git/log", async (_req: Request, res: Response) => {
   try {
-    const result = await gitExecPanel("log --pretty=format:'%h|%ar|%s' -n 8");
+    const result = await gitExecPanel(["log", "--pretty=format:%h|%ar|%s", "-n", "8"]);
     if (!result.ok) return res.json([]);
     const commits: CommitEntry[] = (result.out ?? "").split("\n").filter(Boolean).map((line) => {
       const [hash, date, ...rest] = line.split("|");
@@ -446,7 +429,7 @@ app.get("/git/log", async (_req: Request, res: Response) => {
 });
 
 app.get("/git/branches", async (_req: Request, res: Response) => {
-  const result = await gitExecPanel("branch '--format=%(refname:short)'");
+  const result = await gitExecPanel(["branch", "--format=%(refname:short)"]);
   if (!result.ok) return res.json({ ok: false, branches: [] });
   const branches = result.out.split("\n").map(b => b.trim()).filter(Boolean);
   res.json({ ok: true, branches });
@@ -455,7 +438,7 @@ app.get("/git/branches", async (_req: Request, res: Response) => {
 app.post("/git/checkout", async (req: Request<object, object, { branch?: string }>, res: Response) => {
   const { branch } = req.body;
   if (!branch?.trim()) return res.status(400).json({ ok: false, out: "Nombre de rama requerido" });
-  const result = await gitExecPanel(`checkout ${branch.trim()}`);
+  const result = await gitExecPanel(["checkout", branch.trim()]);
   res.json(result);
 });
 
@@ -463,14 +446,14 @@ app.post("/git/branch", async (req: Request<object, object, GitBranchBody>, res:
   const { name, from } = req.body;
   if (!name?.trim()) return res.status(400).json({ ok: false, out: "Nombre de rama requerido" });
   const base = from?.trim() || "HEAD";
-  const result = await gitExecPanel(`checkout -b ${name.trim()} ${base}`);
+  const result = await gitExecPanel(["checkout", "-b", name.trim(), base]);
   res.json(result);
 });
 
 app.post("/git/branch/rename", async (req: Request<object, object, { oldName?: string; newName?: string }>, res: Response) => {
   const { oldName, newName } = req.body;
   if (!oldName?.trim() || !newName?.trim()) return res.status(400).json({ ok: false, out: "Nombres requeridos" });
-  const result = await gitExecPanel(`branch -m ${oldName.trim()} ${newName.trim()}`);
+  const result = await gitExecPanel(["branch", "-m", oldName.trim(), newName.trim()]);
   res.json(result);
 });
 
@@ -480,19 +463,65 @@ app.post("/git/branch/delete", async (req: Request<object, object, { name?: stri
   const PROTECTED = ["master", "main", "develop", "production"];
   if (PROTECTED.includes(name.trim())) return res.status(400).json({ ok: false, out: `La rama "${name}" está protegida y no se puede eliminar.` });
   const flag = force ? "-D" : "-d";
-  const result = await gitExecPanel(`branch ${flag} ${name.trim()}`);
+  const result = await gitExecPanel(["branch", flag, name.trim()]);
   res.json(result);
 });
 
 app.post("/git/init", async (_req: Request, res: Response) => {
   try {
     const cwd = getWorkspaceDir();
-    const result = await execAsync("git init", { cwd, timeout: 10000 });
+    const result = await execFileAsync("git", ["init"], { cwd, timeout: 10000 });
     res.json({ ok: true, out: result.stdout });
   } catch (err) {
     const error = err as { stderr?: string; message: string };
     res.status(500).json({ ok: false, out: error.stderr ?? error.message });
   }
+});
+
+// ─── Undo / Rollback (git stash) ─────────────────────────────────────────────
+
+// Guardar snapshot del estado actual (antes de que el agente haga cambios)
+app.post("/git/stash", async (_req: Request, res: Response) => {
+  const result = await gitExecPanel(["stash", "push", "--include-untracked", "-m", "agent-checkpoint"]);
+  res.json(result);
+});
+
+// Listar snapshots disponibles
+app.get("/git/stash", async (_req: Request, res: Response) => {
+  const result = await gitExecPanel(["stash", "list", "--pretty=format:%gd|%ar|%s"]);
+  if (!result.ok) return res.json({ ok: false, stashes: [] });
+  const stashes = result.out.split("\n").filter(Boolean).map(line => {
+    const [ref, date, ...msgParts] = line.split("|");
+    return { ref: ref?.trim() ?? "", date: date?.trim() ?? "", message: msgParts.join("|").trim() };
+  });
+  res.json({ ok: true, stashes });
+});
+
+// Restaurar último snapshot (pop)
+app.post("/git/stash/pop", async (_req: Request, res: Response) => {
+  const result = await gitExecPanel(["stash", "pop"]);
+  res.json(result);
+});
+
+// Restaurar snapshot específico sin eliminarlo
+app.post("/git/stash/apply", async (req: Request<object, object, { ref?: string }>, res: Response) => {
+  const { ref = "stash@{0}" } = req.body;
+  // Validar formato: solo stash@{N}
+  if (!/^stash@\{\d+\}$/.test(ref)) {
+    return res.status(400).json({ ok: false, out: "Referencia de stash inválida" });
+  }
+  const result = await gitExecPanel(["stash", "apply", ref]);
+  res.json(result);
+});
+
+// Eliminar snapshot sin restaurarlo
+app.delete("/git/stash/:ref", async (req: Request, res: Response) => {
+  const ref = decodeURIComponent(req.params.ref as string);
+  if (!/^stash@\{\d+\}$/.test(ref)) {
+    return res.status(400).json({ ok: false, out: "Referencia de stash inválida" });
+  }
+  const result = await gitExecPanel(["stash", "drop", ref]);
+  res.json(result);
 });
 
 // ─── Notes Endpoints ─────────────────────────────────────────────────────────
@@ -567,26 +596,20 @@ app.post("/chat", (req: Request<object, object, ChatBody>, res: Response) => {
     ? clientJobId
     : generateJobId();
 
-  const job: Job = {
-    status: "running",
-    events: [],
-    listeners: new Set(),
-    createdAt: Date.now(),
-  };
-  jobStore.set(jobId, job);
+  const job = jobStore.create(jobId);
 
   // Start processing in background
   (async () => {
-    const onTool    = ({ name, args }: ToolEvent)             => emitJobEvent(job, { type: "tool", name, args });
+    const onTool    = ({ name, args }: ToolEvent)             => jobStore.emitEvent(job, { type: "tool", name, args });
     const onDone    = (payload: DoneEvent)                    => {
-      emitJobEvent(job, { type: "done", ...payload });
-      job.status = "done";
-      closeJobListeners(job);
+      jobStore.emitEvent(job, { type: "done", ...payload });
+      jobStore.setStatus(job, "done");
+      jobStore.closeListeners(job);
     };
-    const onSwitch  = ({ from, reason }: ProviderSwitchEvent) => emitJobEvent(job, { type: "providerSwitch", from, reason });
+    const onSwitch  = ({ from, reason }: ProviderSwitchEvent) => jobStore.emitEvent(job, { type: "providerSwitch", from, reason });
     const onConfirm = (event: ConfirmEvent) => {
       pendingConfirms.set(event.id, event.resolve);
-      emitJobEvent(job, { type: "confirm", id: event.id, toolName: event.toolName, args: event.args });
+      jobStore.emitEvent(job, { type: "confirm", id: event.id, toolName: event.toolName, args: event.args });
     };
 
     currentAgent.events.once("done",         onDone);
@@ -597,16 +620,14 @@ app.post("/chat", (req: Request<object, object, ChatBody>, res: Response) => {
     try {
       await currentAgent.processMessage(message);
     } catch (err) {
-      emitJobEvent(job, { type: "error", message: (err as Error).message });
-      job.status = "error";
-      closeJobListeners(job);
+      jobStore.emitEvent(job, { type: "error", message: (err as Error).message });
+      jobStore.setStatus(job, "error");
+      jobStore.closeListeners(job);
     } finally {
       currentAgent.events.off("tool",          onTool);
       currentAgent.events.off("done",          onDone);
       currentAgent.events.off("providerSwitch", onSwitch);
       currentAgent.events.off("confirm",        onConfirm);
-      // Auto-cleanup after 30 minutes
-      setTimeout(() => jobStore.delete(jobId), 30 * 60 * 1000);
     }
   })();
 
@@ -673,6 +694,7 @@ app.get("/chat/stream/:jobId", (req: Request, res: Response) => {
     clearInterval(keepalive);
     job.listeners.delete(listener);
   });
+
 });
 
 app.post("/chat/confirm", (req: Request<object, object, { id: string; approved: boolean }>, res: Response) => {

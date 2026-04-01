@@ -31,6 +31,8 @@ const KNOWN_CONTEXT_WINDOWS: Record<string, number> = {
   // Ollama local
   "llama3":                       8192,
   "llama3:latest":                8192,
+  "qwen2.5-coder:7b":            32768,
+  "qwen2.5-coder":               32768,
   // Groq
   "llama-3.1-8b-instant":       131072,
   "llama-3.3-70b-versatile":     32768,
